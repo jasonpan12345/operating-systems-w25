@@ -3,6 +3,7 @@
 #include <string.h>
 #include "shellmemory.h"
 #include "shell.h"
+#include <dirent.h>
 
 int MAX_ARGS_SIZE = 3;
 
@@ -25,6 +26,7 @@ int source (char *script);
 int badcommandFileDoesNotExist ();
 
 int echo (char *var);
+int my_ls ();
 
 // Interpret commands and their arguments
 int interpreter (char *command_args[], int args_size) {
@@ -70,7 +72,10 @@ int interpreter (char *command_args[], int args_size) {
         if (args_size != 2)
             return badcommand ();
         return echo (command_args[1]);
-
+    } else if (strcmp (command_args[0], "my_ls") == 0) {
+        if (args_size != 1)
+            return badcommand ();
+        return my_ls (command_args[1]);
     } else
         return badcommand ();
 }
@@ -84,6 +89,7 @@ quit			Exits / terminates the shell with “Bye!”\n \
 set VAR STRING		Assigns a value to shell memory\n \
 print VAR		Displays the STRING assigned to VAR\n \
 echo STRING / $VAR     Displays STRING / Displays the STRING assigned to VAR\n \
+my_ls               Lists all the files present in the current directory\n \
 source SCRIPT.TXT	Executes the file SCRIPT.TXT\n ";
     printf ("%s\n", help_string);
     return 0;
@@ -146,6 +152,29 @@ int echo (char *var) {
     } else {
         printf ("%s\n", var);
     }
+
+    return 0;
+}
+
+int alphasort (const struct dirent **a, const struct dirent **b) {
+    return strcoll ((*a)->d_name, (*b)->d_name);
+}
+
+int my_ls () {
+    struct dirent **namelist;
+    int n;
+
+    // Scan directory and sort alphabetically
+    n = scandir (".", &namelist, NULL, alphasort);
+    if (n < 0) {
+        return 1;
+    }
+
+    for (int i = 0; i < n; i++) {       // Print filenames
+        printf ("%s\n", namelist[i]->d_name);
+        free (namelist[i]);     // Free allocated dirent struct
+    }
+    free (namelist);
 
     return 0;
 }
