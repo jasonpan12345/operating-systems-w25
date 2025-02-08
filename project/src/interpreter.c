@@ -27,6 +27,8 @@ int badcommandFileDoesNotExist ();
 
 int echo (char *var);
 int my_ls ();
+int my_mkdir (char *var);
+int my_touch (char *var);
 
 // Interpret commands and their arguments
 int interpreter (char *command_args[], int args_size) {
@@ -76,6 +78,14 @@ int interpreter (char *command_args[], int args_size) {
         if (args_size != 1)
             return badcommand ();
         return my_ls (command_args[1]);
+    } else if (strcmp (command_args[0], "my_mkdir") == 0) {
+        if (args_size != 2)
+            return badcommand ();
+        return my_mkdir (command_args[1]);
+    } else if (strcmp (command_args[0], "my_touch") == 0) {
+        if (args_size != 2)
+            return badcommand ();
+        return my_touch (command_args[1]);
     } else
         return badcommand ();
 }
@@ -89,7 +99,9 @@ quit			Exits / terminates the shell with “Bye!”\n \
 set VAR STRING		Assigns a value to shell memory\n \
 print VAR		Displays the STRING assigned to VAR\n \
 echo STRING / $VAR     Displays STRING / Displays the STRING assigned to VAR\n \
-my_ls               Lists all the files present in the current directory\n \
+my_ls                   Lists all the files present in the current directory\n \
+my_mkdir                creates a new directory with the name dirname in the current directory\n \
+my_touch                creates a new empty file inside the current directory\n \
 source SCRIPT.TXT	Executes the file SCRIPT.TXT\n ";
     printf ("%s\n", help_string);
     return 0;
@@ -176,5 +188,28 @@ int my_ls () {
     }
     free (namelist);
 
+    return 0;
+}
+
+/*
+    TODO: Complete this later, waiting to see if we can use 'sys/stat'
+*/
+int my_mkdir (char *var) {
+    if (var[0] == '$') {        // check if first character is '$'
+        if (strcmp (mem_get_value (var + 1), "Variable does not exist") == 0) {
+            printf ("mkdir Var DNE\n"); // variable does not exist
+        } else {
+            printf ("mkdir VAR exists\n");      // variable exists
+        }
+    } else {
+        //mkdir ("./%s", var);    
+    }
+
+    return 0;
+}
+
+int my_touch (char *filename) {
+    FILE *file = fopen (filename, "w");
+    fclose (file);
     return 0;
 }
