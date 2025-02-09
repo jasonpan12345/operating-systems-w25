@@ -5,6 +5,7 @@
 #include "shell.h"
 #include <dirent.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 int MAX_ARGS_SIZE = 3;
 
@@ -198,18 +199,16 @@ int my_ls () {
     return 0;
 }
 
-/*
-    TODO: Complete this later, waiting to see if we can use 'sys/stat'
-*/
 int my_mkdir (char *var) {
     if (var[0] == '$') {        // check if first character is '$'
         if (strcmp (mem_get_value (var + 1), "Variable does not exist") == 0) {
-            printf ("mkdir Var DNE\n"); // variable does not exist
+            printf ("Bad command: my_mkdir\n"); // variable does not exist
+
         } else {
-            printf ("mkdir VAR exists\n");      // variable exists
+            mkdir (mem_get_value (var + 1), 0755);      // create directory with variable value
         }
     } else {
-        //mkdir ("./%s", var);    
+        mkdir (var, 0755);
     }
 
     return 0;
