@@ -4,6 +4,7 @@
 #include "shellmemory.h"
 #include "shell.h"
 #include <dirent.h>
+#include <unistd.h>
 
 int MAX_ARGS_SIZE = 3;
 
@@ -29,6 +30,7 @@ int echo (char *var);
 int my_ls ();
 int my_mkdir (char *var);
 int my_touch (char *var);
+int my_cd (char *var);
 
 // Interpret commands and their arguments
 int interpreter (char *command_args[], int args_size) {
@@ -86,6 +88,10 @@ int interpreter (char *command_args[], int args_size) {
         if (args_size != 2)
             return badcommand ();
         return my_touch (command_args[1]);
+    } else if (strcmp (command_args[0], "my_cd") == 0) {
+        if (args_size != 2)
+            return badcommand ();
+        return my_cd (command_args[1]);
     } else
         return badcommand ();
 }
@@ -102,6 +108,7 @@ echo STRING / $VAR     Displays STRING / Displays the STRING assigned to VAR\n \
 my_ls                   Lists all the files present in the current directory\n \
 my_mkdir                creates a new directory with the name dirname in the current directory\n \
 my_touch                creates a new empty file inside the current directory\n \
+my_cd                   changes current directory to directory dirname\n \
 source SCRIPT.TXT	Executes the file SCRIPT.TXT\n ";
     printf ("%s\n", help_string);
     return 0;
@@ -179,7 +186,7 @@ int my_ls () {
     // Scan directory and sort alphabetically
     n = scandir (".", &namelist, NULL, alphasort);
     if (n < 0) {
-        return 1;
+        return -1;
     }
 
     for (int i = 0; i < n; i++) {       // Print filenames
@@ -212,4 +219,16 @@ int my_touch (char *filename) {
     FILE *file = fopen (filename, "w");
     fclose (file);
     return 0;
+}
+
+int my_cd (char *dirname) {
+    DIR *dir = opendir (dirname);
+    if (dir == NULL) {          // Directory does not exist
+        printf ("Bad command: my_mkdir\n");
+        return 1;
+    } else {                    // Directory exists
+        chdir (dirname);
+        closedir (dir);
+        return 0;
+    }
 }
