@@ -44,27 +44,41 @@ int main (int argc, char *argv[]) {
 int wordEnding (char c) {
     // You may want to add ';' to this at some point,
     // or you may want to find a different way to implement chains.
-    return c == '\0' || c == '\n' || c == ' ';
+    return c == '\0' || c == '\n' || c == ' ' || c == ';';
 }
 
 int parseInput (char inp[]) {
-    char tmp[200], *words[100];
-    int ix = 0, w = 0;
-    int wordlen;
+    int ix = 0;
     int errorCode;
-    for (ix = 0; inp[ix] == ' ' && ix < 1000; ix++);    // skip white spaces
-    while (inp[ix] != '\n' && inp[ix] != '\0' && ix < 1000) {
-        // extract a word
-        for (wordlen = 0; !wordEnding (inp[ix]) && ix < 1000; ix++, wordlen++) {
-            tmp[wordlen] = inp[ix];
+
+    while (inp[ix] != '\n' && inp[ix] != '\0') {
+        //printf (" inp[%d]:%s", ix, &inp[ix]);
+
+        char tmp[200], *words[100];
+        int w = 0;
+        int wordlen;
+
+        for (; inp[ix] == ' ' && ix < 1000; ix++);      // skip white spaces
+        while (inp[ix] != '\n' && inp[ix] != '\0' && ix < 1000) {
+            // extract a word
+            for (wordlen = 0; !wordEnding (inp[ix]) && ix < 1000;
+                 ix++, wordlen++) {
+                tmp[wordlen] = inp[ix];
+            }
+            tmp[wordlen] = '\0';
+            words[w] = strdup (tmp);
+            w++;
+            if (inp[ix] == '\0')
+                break;
+            if (inp[ix] == ';') {
+                ix++;
+                break;
+            }
+
+            ix++;
         }
-        tmp[wordlen] = '\0';
-        words[w] = strdup (tmp);
-        w++;
-        if (inp[ix] == '\0')
-            break;
-        ix++;
+        //printf ("after w:%d, words:%s\n", w, *words);
+        errorCode = interpreter (words, w);
     }
-    errorCode = interpreter (words, w);
     return errorCode;
 }
