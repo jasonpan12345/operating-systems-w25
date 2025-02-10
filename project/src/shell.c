@@ -52,8 +52,6 @@ int parseInput (char inp[]) {
     int errorCode;
 
     while (inp[ix] != '\n' && inp[ix] != '\0') {
-        //printf (" inp[%d]:%s", ix, &inp[ix]);
-
         char tmp[200], *words[100];
         int w = 0;
         int wordlen;
@@ -77,7 +75,6 @@ int parseInput (char inp[]) {
 
             ix++;
         }
-        //printf ("after w:%d, words:%s\n", w, *words);
         errorCode = interpreter (words, w);
     }
     return errorCode;
