@@ -6,6 +6,7 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 int MAX_ARGS_SIZE = 3;
 
@@ -32,6 +33,7 @@ int my_ls ();
 int my_mkdir (char *var);
 int my_touch (char *var);
 int my_cd (char *var);
+int run (char *command_args[], int args_size);
 
 // Interpret commands and their arguments
 int interpreter (char *command_args[], int args_size) {
@@ -93,6 +95,10 @@ int interpreter (char *command_args[], int args_size) {
         if (args_size != 2)
             return badcommand ();
         return my_cd (command_args[1]);
+    } else if (strcmp (command_args[0], "run") == 0) {
+        if (args_size < 2)
+            return badcommand ();
+        return run (command_args + 1, args_size - 1);
     } else
         return badcommand ();
 }
@@ -110,6 +116,7 @@ my_ls                   Lists all the files present in the current directory\n \
 my_mkdir                creates a new directory with the name dirname in the current directory\n \
 my_touch                creates a new empty file inside the current directory\n \
 my_cd                   changes current directory to directory dirname\n \
+run ARGS                executes given command\n \
 source SCRIPT.TXT	Executes the file SCRIPT.TXT\n ";
     printf ("%s\n", help_string);
     return 0;
@@ -223,11 +230,31 @@ int my_touch (char *filename) {
 int my_cd (char *dirname) {
     DIR *dir = opendir (dirname);
     if (dir == NULL) {          // Directory does not exist
-        printf ("Bad command: my_mkdir\n");
+        printf ("Bad command: my_cd\n");
         return 1;
     } else {                    // Directory exists
         chdir (dirname);
         closedir (dir);
         return 0;
+    }
+}
+
+int run (char *command_args[], int args_size) {
+    pid_t pid = fork ();
+    if (pid < 0) {
+        return 1;
+    }
+    if (pid == 0) {             // Child process
+        command_args[args_size] = NULL;
+        execvp (command_args[0], command_args);
+        exit (1);
+    } else {                    // Parent process
+        int status;
+        waitpid (pid, &status, 0);
+        if (WIFEXITED (status)) {
+            return WEXITSTATUS (status);
+        } else {
+            return 1;
+        }
     }
 }
