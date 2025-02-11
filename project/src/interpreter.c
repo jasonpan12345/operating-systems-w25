@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <ctype.h>
 
 int MAX_ARGS_SIZE = 3;
 
@@ -217,15 +218,13 @@ int isAlphanumeric(const char *str) {
 }
 
 int my_mkdir(char *var) {
-    char *dirName = mem_get_value(var + 1);  // get value from shell memory
-
     if (var[0] == '$') {  // check if first character is '$'
         if (strcmp(mem_get_value (var + 1), "Variable does not exist") == 0) {
             printf("Bad command: my_mkdir\n");  // variable does not exist
-        } else if (!isAlphanumeric(dirName)) {
+        } else if (!isAlphanumeric(mem_get_value (var + 1))) {
             printf("Bad command: my_mkdir\n");  // variable value is not alphanumeric
         }   
-         mkdir(dirName, 0755);
+         mkdir(mem_get_value (var + 1), 0755);
     }
 
     else {
@@ -233,7 +232,6 @@ int my_mkdir(char *var) {
             printf("Bad command: my_mkdir\n");  // directory name is not alphanumeric
         } else {
             mkdir(var, 0755);
-            return 0; // Success
             }
         }
         return 0;
