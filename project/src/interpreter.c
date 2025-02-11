@@ -206,20 +206,38 @@ int my_ls () {
     return 0;
 }
 
-int my_mkdir (char *var) {
-    if (var[0] == '$') {        // check if first character is '$'
-        if (strcmp (mem_get_value (var + 1), "Variable does not exist") == 0) {
-            printf ("Bad command: my_mkdir\n"); // variable does not exist
-
-        } else {
-            mkdir (mem_get_value (var + 1), 0755);      // create directory with variable value
+// Function to check if a string is alphanumeric
+int isAlphanumeric(const char *str) {
+    for (int i = 0; str[i] != '\0'; i++) {
+        if (!isalnum(str[i])) {
+            return 0; // Not alphanumeric
         }
-    } else {
-        mkdir (var, 0755);
+    }
+    return 1; // Alphanumeric
+}
+
+int my_mkdir(char *var) {
+    char *dirName = mem_get_value(var + 1);  // get value from shell memory
+
+    if (var[0] == '$') {  // check if first character is '$'
+        if (strcmp(mem_get_value (var + 1), "Variable does not exist") == 0) {
+            printf("Bad command: my_mkdir\n");  // variable does not exist
+        } else if (!isAlphanumeric(dirName)) {
+            printf("Bad command: my_mkdir\n");  // variable value is not alphanumeric
+        }   
+         mkdir(dirName, 0755);
     }
 
-    return 0;
-}
+    else {
+        if (!isAlphanumeric(var)) {
+            printf("Bad command: my_mkdir\n");  // directory name is not alphanumeric
+        } else {
+            mkdir(var, 0755);
+            return 0; // Success
+            }
+        }
+        return 0;
+    }
 
 int my_touch (char *filename) {
     FILE *file = fopen (filename, "w");
