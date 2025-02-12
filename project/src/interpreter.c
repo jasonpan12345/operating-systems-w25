@@ -208,30 +208,31 @@ int my_ls () {
 }
 
 // Function to check if a string is alphanumeric
-int isAlphanumeric(const char *str) {
+int isAlphanumeric (const char *str) {
     for (int i = 0; str[i] != '\0'; i++) {
-        if (!isalnum(str[i])) {
-            return 0; // Not alphanumeric
+        if (!isalnum (str[i])) {
+            return 0;           // Not alphanumeric
         }
     }
-    return 1; // Alphanumeric
+    return 1;                   // Alphanumeric
 }
 
 int my_mkdir (char *var) {
     if (var[0] == '$') {        // check if first character is '$'
         if (strcmp (mem_get_value (var + 1), "Variable does not exist") == 0) {
             printf ("Bad command: my_mkdir\n"); // variable does not exist
-        } else if (!isAlphanumeric(mem_get_value(var + 1))) {
-            printf("Bad command: my_mkdir\n");
+        } else if (!isAlphanumeric (mem_get_value (var + 1))) {
+            printf ("Bad command: my_mkdir\n");
         } else {
             mkdir (mem_get_value (var + 1), 0755);      // create directory with variable value
         }
     } else {
-        if (!isAlphanumeric(var)) {
-            printf("Bad command: mk_dir\n");
+        if (!isAlphanumeric (var)) {
+            printf ("Bad command: my_mkdir\n");
         }
         mkdir (var, 0755);
-    } return 0;
+    }
+    return 0;
 }
 
 int my_touch (char *filename) {
@@ -253,6 +254,8 @@ int my_cd (char *dirname) {
 }
 
 int run (char *command_args[], int args_size) {
+    fflush (stdout);            // Flush output before forking
+
     pid_t pid = fork ();
     if (pid < 0) {
         return 1;
