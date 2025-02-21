@@ -8,7 +8,13 @@ struct memory_struct {
     char *value;
 };
 
+struct program_line {
+    char *line;
+};  
+
 struct memory_struct shellmemory[MEM_SIZE];
+struct program_line program_memory[MAX_PROGRAM_LINES];
+int program_line_count = 0;
 
 // Helper functions
 int match (char *model, char *var) {
@@ -30,6 +36,9 @@ void mem_init () {
     for (i = 0; i < MEM_SIZE; i++) {
         shellmemory[i].var = "none";
         shellmemory[i].value = "none";
+    }
+    for (i = 0; i < MAX_PROGRAM_LINES; i++) {
+        program_memory[i].line = NULL;
     }
 }
 
@@ -66,4 +75,20 @@ char *mem_get_value (char *var_in) {
         }
     }
     return "Variable does not exist";
+}
+
+int mem_store_program_line(char *line) {
+    if (program_line_count >= MAX_PROGRAM_LINES) {
+        return -1; // No space left
+    }
+    program_memory[program_line_count].line = strdup(line);
+    program_line_count++;
+    return program_line_count - 1;
+}
+
+char *mem_get_program_line(int index) {
+    if (index < 0 || index >= program_line_count) {
+        return NULL;
+    }
+    return program_memory[index].line;
 }
