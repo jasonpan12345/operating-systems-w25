@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <ctype.h>
+#include "scheduler.h"
 
 int MAX_ARGS_SIZE = 3;
 
@@ -154,18 +155,39 @@ int source (char *script) {
         return badcommandFileDoesNotExist ();
     }
 
-    fgets (line, MAX_USER_INPUT - 1, p);
-    while (1) {
-        errCode = parseInput (line);    // which calls interpreter()
-        memset (line, 0, sizeof (line));
-
-        if (feof (p)) {
-            break;
-        }
-        fgets (line, MAX_USER_INPUT - 1, p);
+    int start_index = get_program_line_count ();
+    // Load the script into program memory
+    while (fgets (line, MAX_USER_INPUT - 1, p)) {
+        line[strcspn (line, "\r\n")] = 0;
+        mem_store_program_line (line);
     }
-
     fclose (p);
+
+    int length = get_program_line_count () - start_index;
+    int pid = pcb_create (start_index, length);
+
+    if (pid == -1) {
+        return 1;
+    }
+    // Add the PCB to the ready queue
+    struct PCB *pcb = pcb_get (pid);
+    ready_queue_add (pcb);
+
+    /*
+       fgets (line, MAX_USER_INPUT - 1, p);
+       while (1) {
+       errCode = parseInput (line);    // which calls interpreter()
+       memset (line, 0, sizeof (line));
+
+       if (feof (p)) {
+       break;
+       }
+       fgets (line, MAX_USER_INPUT - 1, p);
+       }
+
+       fclose (p); */
+
+    scheduler_run ();
 
     return errCode;
 }

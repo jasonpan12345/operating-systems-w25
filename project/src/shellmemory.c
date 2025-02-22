@@ -3,6 +3,11 @@
 #include <stdio.h>
 #include "shellmemory.h"
 
+#define MAX_PROGRAM_LINES 1000
+
+int mem_store_program_line (char *line);
+char *mem_get_program_line (int index);
+
 struct memory_struct {
     char *var;
     char *value;
@@ -10,7 +15,7 @@ struct memory_struct {
 
 struct program_line {
     char *line;
-};  
+};
 
 struct memory_struct shellmemory[MEM_SIZE];
 struct program_line program_memory[MAX_PROGRAM_LINES];
@@ -77,18 +82,29 @@ char *mem_get_value (char *var_in) {
     return "Variable does not exist";
 }
 
-int mem_store_program_line(char *line) {
+int mem_store_program_line (char *line) {
     if (program_line_count >= MAX_PROGRAM_LINES) {
-        return -1; // No space left
+        return -1;              // No space left
     }
-    program_memory[program_line_count].line = strdup(line);
+    program_memory[program_line_count].line = strdup (line);
     program_line_count++;
     return program_line_count - 1;
 }
 
-char *mem_get_program_line(int index) {
+char *mem_get_program_line (int index) {
     if (index < 0 || index >= program_line_count) {
         return NULL;
     }
     return program_memory[index].line;
+}
+
+int get_program_line_count () {
+    return program_line_count;
+}
+
+void mem_clean_program_line (int i) {
+    if (program_memory[i].line != NULL) {
+        free (program_memory[i].line);
+        program_memory[i].line = NULL;
+    }
 }
