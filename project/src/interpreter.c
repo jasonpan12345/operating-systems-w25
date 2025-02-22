@@ -10,7 +10,7 @@
 #include <ctype.h>
 #include "scheduler.h"
 
-int MAX_ARGS_SIZE = 3;
+int MAX_ARGS_SIZE = 5;
 
 int badcommand () {
     printf ("Unknown Command\n");
@@ -36,6 +36,7 @@ int my_mkdir (char *var);
 int my_touch (char *var);
 int my_cd (char *var);
 int run (char *command_args[], int args_size);
+int exec (char *command_args[], int args_size);
 
 // Interpret commands and their arguments
 int interpreter (char *command_args[], int args_size) {
@@ -101,6 +102,12 @@ int interpreter (char *command_args[], int args_size) {
         if (args_size < 2)
             return badcommand ();
         return run (command_args + 1, args_size - 1);
+    } else if (strcmp (command_args[0], "exec") == 0) {
+        if (args_size < 3){
+                return badcommand ();
+            }
+            
+        return exec (command_args + 1, args_size - 1);
     } else
         return badcommand ();
 }
@@ -295,4 +302,25 @@ int run (char *command_args[], int args_size) {
             return 1;
         }
     }
+}
+
+int exec (char *command_args[], int args_size) {
+    // check which POLICY in last argument
+    if(strcmp(command_args[args_size-1], "FCFS") == 0) {
+        printf("executed FCFS\n"); // TODO: Implement for 1.2.2
+    }
+    else if(strcmp(command_args[args_size-1], "SJF") == 0) {
+        printf("executed SJF\n"); // TODO: Implement for 1.2.3 
+    }
+    else if(strcmp(command_args[args_size-1], "RR") == 0) {
+        printf("executed RR\n"); // TODO: Implement for 1.2.3 
+    }
+    else if(strcmp(command_args[args_size-1], "AGING") == 0) {
+        printf("executed AGING\n"); // TODO: Implement for 1.2.4
+    }
+    else {
+        printf("Bad command: invalid POLICY\n");
+    }
+    
+    return 0;
 }
