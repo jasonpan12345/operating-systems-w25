@@ -103,10 +103,8 @@ int interpreter (char *command_args[], int args_size) {
             return badcommand ();
         return run (command_args + 1, args_size - 1);
     } else if (strcmp (command_args[0], "exec") == 0) {
-        if (args_size < 3){
-                return badcommand ();
-            }
-            
+        if (args_size < 3)
+            return badcommand ();
         return exec (command_args + 1, args_size - 1);
     } else
         return badcommand ();
@@ -156,7 +154,7 @@ int print (char *var) {
 int source (char *script) {
     int errCode = 0;
     char line[MAX_USER_INPUT];
-    FILE *p = fopen (script, "rt");     // the program is in a file
+    FILE *p = fopen (script, "rt");
 
     if (p == NULL) {
         return badcommandFileDoesNotExist ();
@@ -179,20 +177,6 @@ int source (char *script) {
     // Add the PCB to the ready queue
     struct PCB *pcb = pcb_get (pid);
     ready_queue_add (pcb);
-
-    /*
-       fgets (line, MAX_USER_INPUT - 1, p);
-       while (1) {
-       errCode = parseInput (line);    // which calls interpreter()
-       memset (line, 0, sizeof (line));
-
-       if (feof (p)) {
-       break;
-       }
-       fgets (line, MAX_USER_INPUT - 1, p);
-       }
-
-       fclose (p); */
 
     scheduler_run ();
 
@@ -305,22 +289,65 @@ int run (char *command_args[], int args_size) {
 }
 
 int exec (char *command_args[], int args_size) {
-    // check which POLICY in last argument
-    if(strcmp(command_args[args_size-1], "FCFS") == 0) {
-        printf("executed FCFS\n"); // TODO: Implement for 1.2.2
+    char *policy = command_args[args_size - 1];
+
+    // Check for duplicate scripts
+    for (int i = 0; i < args_size - 1; i++) {
+        for (int j = i + 1; j < args_size - 1; j++) {
+            if (strcmp(command_args[i], command_args[j]) == 0) {
+                printf("Bad command: duplicate scripts\n");
+                return 1;
+            }
+        }
     }
-    else if(strcmp(command_args[args_size-1], "SJF") == 0) {
+    scheduler_init();
+    
+    // check which POLICY in last argument
+    if(strcmp(policy, "FCFS") == 0) {
+        //printf("executed FCFS\n"); // TODO: Implement for 1.2.2
+        for (int i = 0; i < args_size - 1; i++) {
+            //printf ("command arg[%d]: %s\n", i, command_args[i]);
+
+            char line[MAX_USER_INPUT];
+            FILE *p = fopen (command_args[i], "rt");
+
+            if (p == NULL) {
+                return badcommandFileDoesNotExist ();
+            }
+
+            int start_index = get_program_line_count ();
+            // Load the script into program memory
+            while (fgets (line, MAX_USER_INPUT - 1, p)) {
+                mem_store_program_line (line);
+            }
+            fclose (p);
+
+            int length = get_program_line_count () - start_index;
+            int pid = pcb_create (start_index, length);
+
+            if (pid == -1) {
+                return 1;
+            }
+            // Add the PCB to the ready queue
+            struct PCB *pcb = pcb_get (pid);
+            ready_queue_add (pcb);
+            
+        }
+        scheduler_run();
+    }
+    else if(strcmp(policy, "SJF") == 0) {
         printf("executed SJF\n"); // TODO: Implement for 1.2.3 
     }
-    else if(strcmp(command_args[args_size-1], "RR") == 0) {
+    else if(strcmp(policy, "RR") == 0) {
         printf("executed RR\n"); // TODO: Implement for 1.2.3 
     }
-    else if(strcmp(command_args[args_size-1], "AGING") == 0) {
+    else if(strcmp(policy, "AGING") == 0) {
         printf("executed AGING\n"); // TODO: Implement for 1.2.4
     }
     else {
         printf("Bad command: invalid POLICY\n");
     }
+    
     
     return 0;
 }
