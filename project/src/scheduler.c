@@ -12,7 +12,7 @@ void scheduler_run () {
     while (!ready_queue_is_empty ()) {
         // Get process at head of ready queue
         struct PCB *pcb = ready_queue_remove ();
-        if (pcb == NULL) { // no process in ready queue
+        if (pcb == NULL) {      // no process in ready queue
             return;
         }
         // Execute process
@@ -23,11 +23,7 @@ void scheduler_run () {
             if (line == NULL) { // invalid program line
                 break;
             }
-            int errCode = parseInput (line);
-            if (errCode != 0) {
-                printf ("Error executing line %d: %s\n",
-                        pcb->program_counter + 1, line);
-            }
+            parseInput (line);
             // Update program counter
             pcb_update_program_counter (pcb->pid, pcb->program_counter + 1);
         }

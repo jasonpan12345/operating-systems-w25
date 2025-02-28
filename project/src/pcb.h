@@ -1,7 +1,7 @@
 #ifndef PCB_H
-#define PCB_H
+#   define PCB_H
 
-#define MAX_PROCESSES 100
+#   define MAX_PROCESSES 100
 
 struct PCB {
     int pid;

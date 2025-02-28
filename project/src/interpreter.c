@@ -294,19 +294,17 @@ int exec (char *command_args[], int args_size) {
     // Check for duplicate scripts
     for (int i = 0; i < args_size - 1; i++) {
         for (int j = i + 1; j < args_size - 1; j++) {
-            if (strcmp(command_args[i], command_args[j]) == 0) {
-                printf("Bad command: duplicate scripts\n");
+            if (strcmp (command_args[i], command_args[j]) == 0) {
+                printf ("Bad command: duplicate scripts\n");
                 return 1;
             }
         }
     }
-    scheduler_init();
-    
+    scheduler_init ();
+
     // check which POLICY in last argument
-    if(strcmp(policy, "FCFS") == 0) {
-        //printf("executed FCFS\n"); // TODO: Implement for 1.2.2
+    if (strcmp (policy, "FCFS") == 0) {
         for (int i = 0; i < args_size - 1; i++) {
-            //printf ("command arg[%d]: %s\n", i, command_args[i]);
 
             char line[MAX_USER_INPUT];
             FILE *p = fopen (command_args[i], "rt");
@@ -331,23 +329,120 @@ int exec (char *command_args[], int args_size) {
             // Add the PCB to the ready queue
             struct PCB *pcb = pcb_get (pid);
             ready_queue_add (pcb);
-            
+
         }
-        scheduler_run();
+        scheduler_run ();
+    } else if (strcmp (policy, "SJF") == 0) {
+        int SJFindex[args_size - 1];
+        for (int i = 0; i < args_size - 1; i++) {
+            SJFindex[i] = -1;   // Initialize to -1
+        }
+        for (int i = 0; i < args_size - 1; i++) {
+            char line[MAX_USER_INPUT];
+            FILE *p = fopen (command_args[i], "rt");
+
+            if (p == NULL) {
+                return badcommandFileDoesNotExist ();
+            }
+
+            int start_index = get_program_line_count ();
+            // Load the script into program memory
+            while (fgets (line, MAX_USER_INPUT - 1, p)) {
+                mem_store_program_line (line);
+            }
+            fclose (p);
+
+            int length = get_program_line_count () - start_index;
+            int pid = pcb_create (start_index, length);
+
+            if (pid == -1) {
+                return 1;
+            }
+            // Insert into SJFindex in sorted order
+            int j;
+            for (j = 0; j < args_size - 1; j++) {
+                if (SJFindex[j] == -1) {
+                    SJFindex[j] = pid;
+                    break;
+                }
+                struct PCB *pcb = pcb_get (SJFindex[j]);
+                if (length < pcb->length) {
+                    for (int k = args_size - 2; k >= j; k--) {
+                        SJFindex[k + 1] = SJFindex[k];  // Shift right
+                    }
+                    SJFindex[j] = pid;
+                    break;
+                }
+            }
+        }
+
+        // Add to ready queue in sorted order
+        for (int i = 0; i < args_size - 1 && SJFindex[i] != -1; i++) {
+            struct PCB *pcb = pcb_get (SJFindex[i]);
+            ready_queue_add (pcb);
+        }
+
+        scheduler_run ();
+
+    } else if (strcmp (policy, "RR") == 0) {
+        for (int i = 0; i < args_size - 1; i++) {
+
+            char line[MAX_USER_INPUT];
+            FILE *p = fopen (command_args[i], "rt");
+
+            if (p == NULL) {
+                return badcommandFileDoesNotExist ();
+            }
+
+            int start_index = get_program_line_count ();
+            // Load the script into program memory
+            while (fgets (line, MAX_USER_INPUT - 1, p)) {
+                mem_store_program_line (line);
+            }
+            fclose (p);
+
+            int length = get_program_line_count () - start_index;
+            int pid = pcb_create (start_index, length);
+
+            if (pid == -1) {
+                return 1;
+            }
+            // Add the PCB to the ready queue
+            struct PCB *pcb = pcb_get (pid);
+            ready_queue_add (pcb);
+
+        }
+        while (!ready_queue_is_empty ()) {
+            struct PCB *pcb = ready_queue_remove ();
+
+
+            int lines_executed = 0;
+            while (pcb->program_counter < pcb->length && lines_executed < 2) {  // execute 2 lines
+                char *line =
+                    mem_get_program_line (pcb->start + pcb->program_counter);
+                if (line == NULL) {
+                    break;      // Invalid line
+                }
+                parseInput (line);
+                pcb_update_program_counter (pcb->pid,
+                                            pcb->program_counter + 1);
+                lines_executed++;
+            }
+
+
+            if (pcb->program_counter < pcb->length) {
+                ready_queue_add (pcb);  // add process back to ready-queue if not finished
+            } else {
+                scheduler_cleanup (pcb);        // process finished
+            }
+        }
+
+    } else if (strcmp (policy, "AGING") == 0) {
+        printf ("executed AGING\n");    // TODO: Implement for 1.2.4
+    } else {
+        printf ("Bad command: invalid POLICY\n");
     }
-    else if(strcmp(policy, "SJF") == 0) {
-        printf("executed SJF\n"); // TODO: Implement for 1.2.3 
-    }
-    else if(strcmp(policy, "RR") == 0) {
-        printf("executed RR\n"); // TODO: Implement for 1.2.3 
-    }
-    else if(strcmp(policy, "AGING") == 0) {
-        printf("executed AGING\n"); // TODO: Implement for 1.2.4
-    }
-    else {
-        printf("Bad command: invalid POLICY\n");
-    }
-    
-    
+
+
     return 0;
 }
