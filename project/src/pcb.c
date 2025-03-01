@@ -21,6 +21,7 @@ int pcb_create (int start_index, int length) {
     pcb_table[next_pid].start = start_index;
     pcb_table[next_pid].length = length;
     pcb_table[next_pid].program_counter = 0;
+    pcb_table[next_pid].job_length_score = length;
 
     return next_pid++;
 }

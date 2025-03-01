@@ -8,6 +8,7 @@ struct PCB {
     int start;                  // start index
     int length;
     int program_counter;
+    int job_length_score;
     struct PCB *next;
 };
 

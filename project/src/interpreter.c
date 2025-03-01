@@ -438,7 +438,79 @@ int exec (char *command_args[], int args_size) {
         }
 
     } else if (strcmp (policy, "AGING") == 0) {
-        printf ("executed AGING\n");    // TODO: Implement for 1.2.4
+        int SJFindex[args_size - 1];
+        for (int i = 0; i < args_size - 1; i++) {
+            SJFindex[i] = -1;
+        }
+        for (int i = 0; i < args_size - 1; i++) {
+            char line[MAX_USER_INPUT];
+            FILE *p = fopen (command_args[i], "rt");
+
+            if (p == NULL) {
+                return badcommandFileDoesNotExist ();
+            }
+
+            int start_index = get_program_line_count ();
+            // Load the script into program memory
+            while (fgets (line, MAX_USER_INPUT - 1, p)) {
+                mem_store_program_line (line);
+            }
+            fclose (p);
+
+            int length = get_program_line_count () - start_index;
+            int pid = pcb_create (start_index, length);
+
+            if (pid == -1) {
+                return 1;
+            }
+            // Insert into SJFindex in sorted order
+            int j;
+            for (j = 0; j < args_size - 1; j++) {
+                if (SJFindex[j] == -1) {
+                    SJFindex[j] = pid;
+                    break;
+                }
+                struct PCB *pcb = pcb_get (SJFindex[j]);
+                if (length < pcb->length) {
+                    for (int k = args_size - 2; k >= j; k--) {
+                        SJFindex[k + 1] = SJFindex[k];  // Shift right
+                    }
+                    SJFindex[j] = pid;
+                    break;
+                }
+            }
+        }
+        // Add to ready queue in sorted order
+        for (int i = 0; i < args_size - 1 && SJFindex[i] != -1; i++) {
+            struct PCB *pcb = pcb_get (SJFindex[i]);
+            ready_queue_add (pcb);
+        }
+        while (!ready_queue_is_empty ()) {
+            // get process at head of ready queue
+            struct PCB *pcb = ready_queue_remove ();
+    
+            // execute 1 instruction
+            char *line = mem_get_program_line (pcb->start + pcb->program_counter);
+            parseInput (line);
+            pcb_update_program_counter (pcb->pid, pcb->program_counter + 1);
+    
+            // age all jobs in ready queue
+            struct PCB *current = ready_queue_get_head ();
+            while (current != NULL) {
+                if (current->job_length_score > 0) {
+                    current->job_length_score--;
+                }
+                current = current->next;
+            }
+    
+            
+            if (pcb->program_counter < pcb->length) {
+                ready_queue_insert (pcb);  // reinsert current job into ready queue if not finished
+            } else {
+                scheduler_cleanup (pcb);
+            }
+        }
+
     } else {
         printf ("Bad command: invalid POLICY\n");
     }
