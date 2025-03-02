@@ -5,6 +5,7 @@
 #include "shell.h"
 #include "interpreter.h"
 #include "shellmemory.h"
+#include "scheduler.h"
 
 int parseInput (char ui[]);
 
@@ -21,6 +22,7 @@ int main (int argc, char *argv[]) {
         userInput[i] = '\0';
     }
 
+    scheduler_init ();
     //init shell memory
     mem_init ();
     while (1) {

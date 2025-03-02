@@ -10,7 +10,7 @@
 #include <ctype.h>
 #include "scheduler.h"
 
-int MAX_ARGS_SIZE = 5;
+int MAX_ARGS_SIZE = 100;
 
 int badcommand () {
     printf ("Unknown Command\n");
@@ -347,10 +347,12 @@ void exec_RR (char *scripts[], int args_size, int steps) {
 
 int exec (char *command_args[], int args_size) {
     char *policy = command_args[args_size - 1];
+    int is_background = 0; // indicates if background mode (0 = false, 1 = true)
 
-    if (strcmp (policy, "#") == 0) { // background mode
-
-        policy = command_args[args_size - 2];
+    if (strcmp (policy, "#") == 0) { // detected background mode
+        is_background = 1;
+        args_size--;
+        policy = command_args[args_size - 1];
     }
 
     // Check for duplicate scripts
@@ -362,7 +364,20 @@ int exec (char *command_args[], int args_size) {
             }
         }
     }
-    scheduler_init ();
+    
+    if (is_background == 1) {
+        // Read the rest of input as batch script process
+        char line[MAX_USER_INPUT];
+        int start_index = get_program_line_count();
+        while (fgets(line, MAX_USER_INPUT - 1, stdin)) {
+            line[strcspn(line, "\r\n")] = 0;
+            mem_store_program_line(line);
+        }
+        int length = get_program_line_count() - start_index;
+        int pid = pcb_create(start_index, length);
+        struct PCB *pcb = pcb_get(pid);
+        ready_queue_add(pcb);
+    }
 
     // check which POLICY in last argument
     if (strcmp (policy, "FCFS") == 0) {
@@ -390,9 +405,6 @@ int exec (char *command_args[], int args_size) {
             int length = get_program_line_count () - start_index;
             int pid = pcb_create (start_index, length);
 
-            if (pid == -1) {
-                return 1;
-            }
             // Insert into SJFindex in sorted order
             int j;
             for (j = 0; j < args_size - 1; j++) {
