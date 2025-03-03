@@ -45,7 +45,7 @@ struct PCB *ready_queue_get_head () {
     return ready_queue.head;
 }
 
-void ready_queue_insert (struct PCB *pcb) { // insert function for AGING
+void ready_queue_insert (struct PCB *pcb) {     // insert function for AGING
     pcb->next = NULL;           // set next pointer to NULL
 
     if (ready_queue.head == NULL) {     // Queue is empty
@@ -56,7 +56,8 @@ void ready_queue_insert (struct PCB *pcb) { // insert function for AGING
         struct PCB *current = ready_queue.head;
         struct PCB *previous = NULL;
 
-        while (current != NULL && current->job_length_score < pcb->job_length_score) {
+        while (current != NULL
+               && current->job_length_score < pcb->job_length_score) {
             previous = current;
             current = current->next;
         }
@@ -64,12 +65,12 @@ void ready_queue_insert (struct PCB *pcb) { // insert function for AGING
         if (previous == NULL) { // Insert at the head of the queue
             pcb->next = ready_queue.head;
             ready_queue.head = pcb;
-        } else {    // Insert after previous
+        } else {                // Insert after previous
             pcb->next = current;
             previous->next = pcb;
         }
 
-        if (current == NULL) { // Update tail if inserting at the end
+        if (current == NULL) {  // Update tail if inserting at the end
             ready_queue.tail = pcb;
         }
     }
