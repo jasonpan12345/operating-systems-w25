@@ -1,14 +1,13 @@
 CC=gcc
-CFLAGS=
-FMT=indent
+#CFLAGS=-g -O0 #-DNDEBUG
+CFLAGS=-DNDEBUG
 
-mysh: shell.c interpreter.c shellmemory.c readyqueue.c pcb.c scheduler.c
-	$(CC) $(CFLAGS) -c shell.c interpreter.c shellmemory.c readyqueue.c pcb.c scheduler.c
-	$(CC) $(CFLAGS) -o mysh shell.o interpreter.o shellmemory.o readyqueue.o pcb.o scheduler.o
+mysh: shell.c interpreter.c shellmemory.c
+	$(CC) $(CFLAGS) -c shell.c interpreter.c shellmemory.c pcb.c queue.c schedule_policy.c
+	$(CC) $(CFLAGS) -o mysh shell.o interpreter.o shellmemory.o pcb.o queue.o schedule_policy.o
 
-style: shell.c shell.h interpreter.c interpreter.h shellmemory.c shellmemory.h readyqueue.c pcb.c scheduler.c readyqueue.h pcb.h scheduler.h
+style: shell.c shell.h interpreter.c interpreter.h shellmemory.c shellmemory.h pcb.c pcb.h queue.c queue.h schedule_policy.c schedule_policy.h
 	$(FMT) $?
 
 clean: 
-	$(RM) mysh; $(RM) *.o; $(RM) *~
-
+	rm mysh; rm *.o

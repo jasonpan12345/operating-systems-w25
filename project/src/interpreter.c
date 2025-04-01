@@ -1,116 +1,157 @@
+#ifdef NDEBUG
+#define debug(...)
+#else
+#define debug(...) fprintf(stderr, __VA_ARGS__)
+#endif
+
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <string.h> 
+#include <ctype.h> // tolower, isdigit
+#include <dirent.h> // scandir
+#include <unistd.h> // chdir
+#include <sys/stat.h> // mkdir
+// for extra challenge:
+#include <sys/types.h> // pid_t
+#include <sys/wait.h> // waitpid
+
+#include "pcb.h"
+#include "queue.h"
+#include "schedule_policy.h"
 #include "shellmemory.h"
 #include "shell.h"
-#include <dirent.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
-#include <ctype.h>
-#include "scheduler.h"
 
-int MAX_ARGS_SIZE = 100;
+#define true 1
+#define false 0
 
-int badcommand () {
-    printf ("Unknown Command\n");
+#define MAX_ARGS_SIZE 7
+
+int badcommand() {
+    printf("Unknown Command\n");
     return 1;
 }
 
+int badcommandTooLong() {
+    printf("Bad command: Too many tokens\n");
+    return 2;
+}
+
 // For source command only
-int badcommandFileDoesNotExist () {
-    printf ("Bad command: File not found\n");
+int badcommandFileDoesNotExist() {
+    printf("Bad command: File not found\n");
     return 3;
 }
 
-int help ();
-int quit ();
-int set (char *var, char *value);
-int print (char *var);
-int source (char *script);
-int badcommandFileDoesNotExist ();
-
-int echo (char *var);
-int my_ls ();
-int my_mkdir (char *var);
-int my_touch (char *var);
-int my_cd (char *var);
-int run (char *command_args[], int args_size);
-int exec (char *command_args[], int args_size);
-
-// Interpret commands and their arguments
-int interpreter (char *command_args[], int args_size) {
-    int i;
-
-    if (args_size < 1 || args_size > MAX_ARGS_SIZE) {
-        return badcommand ();
-    }
-
-    for (i = 0; i < args_size; i++) {   // terminate args at newlines
-        command_args[i][strcspn (command_args[i], "\r\n")] = 0;
-    }
-
-    if (strcmp (command_args[0], "help") == 0) {
-        //help
-        if (args_size != 1)
-            return badcommand ();
-        return help ();
-
-    } else if (strcmp (command_args[0], "quit") == 0) {
-        //quit
-        if (args_size != 1)
-            return badcommand ();
-        return quit ();
-
-    } else if (strcmp (command_args[0], "set") == 0) {
-        //set
-        if (args_size != 3)
-            return badcommand ();
-        return set (command_args[1], command_args[2]);
-
-    } else if (strcmp (command_args[0], "print") == 0) {
-        if (args_size != 2)
-            return badcommand ();
-        return print (command_args[1]);
-
-    } else if (strcmp (command_args[0], "source") == 0) {
-        if (args_size != 2)
-            return badcommand ();
-        return source (command_args[1]);
-
-    } else if (strcmp (command_args[0], "echo") == 0) {
-        if (args_size != 2)
-            return badcommand ();
-        return echo (command_args[1]);
-    } else if (strcmp (command_args[0], "my_ls") == 0) {
-        if (args_size != 1)
-            return badcommand ();
-        return my_ls (command_args[1]);
-    } else if (strcmp (command_args[0], "my_mkdir") == 0) {
-        if (args_size != 2)
-            return badcommand ();
-        return my_mkdir (command_args[1]);
-    } else if (strcmp (command_args[0], "my_touch") == 0) {
-        if (args_size != 2)
-            return badcommand ();
-        return my_touch (command_args[1]);
-    } else if (strcmp (command_args[0], "my_cd") == 0) {
-        if (args_size != 2)
-            return badcommand ();
-        return my_cd (command_args[1]);
-    } else if (strcmp (command_args[0], "run") == 0) {
-        if (args_size < 2)
-            return badcommand ();
-        return run (command_args + 1, args_size - 1);
-    } else if (strcmp (command_args[0], "exec") == 0) {
-        if (args_size < 3)
-            return badcommand ();
-        return exec (command_args + 1, args_size - 1);
-    } else
-        return badcommand ();
+int badcommandMkdir() {
+    printf("Bad command: my_mkdir\n");
+    return 4;
 }
 
-int help () {
+int badcommandCd() {
+    printf("Bad command: my_cd\n");
+    return 5;
+}
+
+int help();
+int quit();
+int set(char *var, char *value[], int value_size);
+int print(char *var);
+int echo(char *tok);
+int ls();
+int my_mkdir(char *name);
+int touch(char *path);
+int cd(char *path);
+int source(char *script);
+int my_exec(char *args[], int args_size);
+int run(char *argv[], int args_size);
+
+void runSchedule(struct queue *q, const struct schedule_policy *p);
+int badcommandFileDoesNotExist();
+
+// Interpret commands and their arguments
+int interpreter(char *command_args[], int args_size) {
+    int i;
+
+    // these bits of debug output were very helpful for debugging
+    // the changes we made to the parser!
+    debug("#args: %d\n", args_size);
+#ifndef NDEBUG
+    for (size_t i = 0; i < args_size; ++i) {
+        debug("  %ld: %s\n", i, command_args[i]);
+    }
+#endif
+
+    if (args_size < 1) { 
+        // this is only even possible because the spec says we shouldn't
+        // just ignore blank lines. In a real implementation,
+        // we would ignore them. (see parseInput in shell.c)
+        return badcommand();
+    }
+    if (args_size > MAX_ARGS_SIZE) { // this is totally possible though
+        return badcommandTooLong();
+    }
+
+    for (i = 0; i < args_size; i++) { // terminate args at newlines
+        command_args[i][strcspn(command_args[i], "\r\n")] = 0;
+    }
+
+    if (strcmp(command_args[0], "help") == 0){
+        //help
+        if (args_size != 1) return badcommand();
+        return help();
+    
+    } else if (strcmp(command_args[0], "quit") == 0) {
+        //quit
+        if (args_size != 1) return badcommand();
+        return quit();
+
+    } else if (strcmp(command_args[0], "set") == 0) {
+        //set
+        if (args_size < 3) return badcommand();
+        if (args_size > 7) return badcommand();	
+        return set(command_args[1], &command_args[2], args_size-2);
+    
+    } else if (strcmp(command_args[0], "print") == 0) {
+        if (args_size != 2) return badcommand();
+        return print(command_args[1]);
+
+    } else if (strcmp(command_args[0], "echo") == 0) {
+        if (args_size != 2) return badcommand();
+        return echo(command_args[1]);
+
+    } else if (strcmp(command_args[0], "my_ls") == 0) {
+        if (args_size != 1) return badcommand();
+        return ls();
+
+    } else if (strcmp(command_args[0], "my_mkdir") == 0) {
+        if (args_size != 2) return badcommand();
+        return my_mkdir(command_args[1]);
+
+    } else if (strcmp(command_args[0], "my_touch") == 0) {
+        if (args_size != 2) return badcommand();
+        return touch(command_args[1]);
+
+    } else if (strcmp(command_args[0], "my_cd") == 0) {
+        if (args_size != 2) return badcommand();
+        return cd(command_args[1]);
+
+    } else if (strcmp(command_args[0], "source") == 0) {
+        if (args_size != 2) return badcommand();
+        return source(command_args[1]);
+    
+    } else if (strcmp(command_args[0], "exec") == 0) {
+        if (args_size < 2) return badcommand();
+        return my_exec(&command_args[1], args_size - 1);
+
+    } else if (strcmp(command_args[0], "run") == 0) {
+        if (args_size < 2) return badcommand();
+        return run(command_args+1, args_size-1);
+
+    } else return badcommand();
+}
+
+int help() {
 
     // note the literal tab characters here for alignment
     char help_string[] = "COMMAND			DESCRIPTION\n \
@@ -118,396 +159,446 @@ help			Displays all the commands\n \
 quit			Exits / terminates the shell with “Bye!”\n \
 set VAR STRING		Assigns a value to shell memory\n \
 print VAR		Displays the STRING assigned to VAR\n \
-echo STRING / $VAR     Displays STRING / Displays the STRING assigned to VAR\n \
-my_ls                   Lists all the files present in the current directory\n \
-my_mkdir                creates a new directory with the name dirname in the current directory\n \
-my_touch                creates a new empty file inside the current directory\n \
-my_cd                   changes current directory to directory dirname\n \
-run ARGS                executes given command\n \
-source SCRIPT.TXT	Executes the file SCRIPT.TXT\n ";
-    printf ("%s\n", help_string);
+source SCRIPT.TXT		Executes the file SCRIPT.TXT\n ";
+    printf("%s\n", help_string);
     return 0;
 }
 
-int quit () {
-    printf ("Bye!\n");
-    exit (0);
+int quit() {
+    printf("Bye!\n");
+    exit(0);
 }
 
-int set (char *var, char *value) {
-    char *link = " ";
+int set(char *var, char *value[], int value_size) {
+    // precondition: value_size in [1,5]
+    char buffer[MAX_USER_INPUT];
+    char *space = " ";
 
-    // Hint: If "value" contains multiple tokens, you'll need to loop through them, 
-    // concatenate each token to the buffer, and handle spacing appropriately. 
-    // Investigate how `strcat` works and how you can use it effectively here.
+    strcpy(buffer, value[0]);
+    for (size_t i = 1; i < value_size; i++) {
+        strcat(buffer, space);
+        strcat(buffer, value[i]);
+    }
 
-    mem_set_value (var, value);
+    mem_set_value(var, buffer);
+
     return 0;
 }
 
-
-int print (char *var) {
-    printf ("%s\n", mem_get_value (var));
-    return 0;
-}
-
-int source (char *script) {
-    int errCode = 0;
-    char line[MAX_USER_INPUT];
-    FILE *p = fopen (script, "rt");
-
-    if (p == NULL) {
-        return badcommandFileDoesNotExist ();
-    }
-
-    int start_index = get_program_line_count ();
-    // Load the script into program memory
-    while (fgets (line, MAX_USER_INPUT - 1, p)) {
-        line[strcspn (line, "\r\n")] = 0;
-        mem_store_program_line (line);
-    }
-    fclose (p);
-
-    int length = get_program_line_count () - start_index;
-    int pid = pcb_create (start_index, length);
-
-    if (pid == -1) {
-        return 1;
-    }
-    // Add the PCB to the ready queue
-    struct PCB *pcb = pcb_get (pid);
-    ready_queue_add (pcb);
-
-    scheduler_run ();
-
-    return errCode;
-}
-
-int echo (char *var) {
-    if (var[0] == '$') {        // check if first character is '$'
-        if (strcmp (mem_get_value (var + 1), "Variable does not exist") == 0) {
-            printf ("\n");      // variable does not exist
-        } else {
-            printf ("%s\n", mem_get_value (var + 1));   // variable exists
-        }
+int print(char *var) {
+    char *value = mem_get_value(var);
+    if (value) {
+        printf("%s\n", value);
+        free(value);
     } else {
-        printf ("%s\n", var);
+        printf("Variable does not exist\n");
     }
+    return 0;
+}
+
+int echo(char *tok) {
+    int must_free = 0;
+    // is it a var?
+    if (tok[0] == '$') {
+        tok++; // advance pointer, so that tok is now the stuff after '$'
+        tok = mem_get_value(tok);
+        if (tok == NULL) {
+            tok = ""; // must use empty string, can't pass NULL to printf
+        } else {
+            must_free = 1;
+        }
+    }
+
+    printf("%s\n", tok);
+
+    // memory management technically optional for this assignment
+    if (must_free) free(tok);
 
     return 0;
 }
 
-int alphasort (const struct dirent **a, const struct dirent **b) {
-    return strcoll ((*a)->d_name, (*b)->d_name);
+// We can hide dotfiles in ls using either the filter operand to scandir,
+// or by checking the first character ourselves when we go to print
+// the names. That would work, and is less code, but this is more robust.
+// And this is also better since it won't allocate extra dirents.
+int ls_filter(const struct dirent *d) {
+    if (d->d_name[0] == '.') return 0;
+    return 1;
 }
 
-int my_ls () {
+int ls_compare_char(char a, char b) {
+    // assumption: a,b are both either digits or letters.
+    // If this is not true, the characters will be effectively compared
+    // as ASCII when we do the lower_a - lower_b fallback.
+
+    // if both are digits, compare them
+    if (isdigit(a) && isdigit(b)) {
+        return a - b;
+    }
+    // if only a is a digit, then b isn't, so a wins.
+    if (isdigit(a)) {
+        return -1;
+    }
+ 
+    // lowercase both letters so we can compare their alphabetic position.
+    char lower_a = tolower(a), lower_b = tolower(b);
+    if (lower_a == lower_b) {
+        // a and b are the same letter, possibly in different cases.
+        // If they are really the same letter, this returns 0.
+        // Otherwise, it's negative if A was capital,
+        // and positive if B is capital.
+        return a - b;
+    }
+
+    // Otherwise, compare their alphabetic position by comparing
+    // them at a known case.
+    return lower_a - lower_b;
+}
+
+int ls_compare_str(const char *a, const char *b) {
+    // a simple strcmp implementation that uses ls_compare_char.
+    // We only check if *a is zero, since if *b is zero earlier,
+    // it would've been unequal to *a at that time and we would return.
+    // If *b is zero at the same point or later than *a, we'll exit the
+    // loop and return the correct value with the last comparison.
+
+    while (*a != '\0') {
+        int d = ls_compare_char(*a, *b);
+        if (d != 0) return d;
+        a++, b++;
+    }
+    return ls_compare_char(*a, *b);
+}
+
+int ls_compare(const struct dirent **a, const struct dirent **b) {
+    return ls_compare_str((*a)->d_name, (*b)->d_name);
+}
+
+int ls() {
+    // straight out of the man page examples for scandir
+    // alphasort uses strcoll instead of strcmp,
+    // so we have to implement our own comparator to match the ls spec.
+    // Note that the test cases weren't very picky about the specified order,
+    // so if you just used alphasort with scandir, you should have passed.
+    // This was intentional on our part.
     struct dirent **namelist;
     int n;
 
-    // Scan directory and sort alphabetically
-    n = scandir (".", &namelist, NULL, alphasort);
-    if (n < 0) {
-        return -1;
-    }
-
-    for (int i = 0; i < n; i++) {       // Print filenames
-        printf ("%s\n", namelist[i]->d_name);
-        free (namelist[i]);     // Free allocated dirent struct
-    }
-    free (namelist);
-
-    return 0;
-}
-
-// Function to check if a string is alphanumeric
-int isAlphanumeric (const char *str) {
-    for (int i = 0; str[i] != '\0'; i++) {
-        if (!isalnum (str[i])) {
-            return 0;           // Not alphanumeric
-        }
-    }
-    return 1;                   // Alphanumeric
-}
-
-int my_mkdir (char *var) {
-    if (var[0] == '$') {        // check if first character is '$'
-        if (strcmp (mem_get_value (var + 1), "Variable does not exist") == 0) {
-            printf ("Bad command: my_mkdir\n"); // variable does not exist
-        } else if (!isAlphanumeric (mem_get_value (var + 1))) {
-            printf ("Bad command: my_mkdir\n");
-        } else {
-            mkdir (mem_get_value (var + 1), 0755);      // create directory with variable value
-        }
-    } else {
-        if (!isAlphanumeric (var)) {
-            printf ("Bad command: my_mkdir\n");
-        }
-        mkdir (var, 0755);
-    }
-    return 0;
-}
-
-int my_touch (char *filename) {
-    FILE *file = fopen (filename, "w");
-    fclose (file);
-    return 0;
-}
-
-int my_cd (char *dirname) {
-    DIR *dir = opendir (dirname);
-    if (dir == NULL) {          // Directory does not exist
-        printf ("Bad command: my_cd\n");
-        return 1;
-    } else {                    // Directory exists
-        chdir (dirname);
-        closedir (dir);
+    n = scandir(".", &namelist, ls_filter, ls_compare);
+    if (n == -1) {
+        // something is catastrophically wrong, just give up.
+        perror("my_ls couldn't scan the directory");
         return 0;
     }
+
+    for (size_t i = 0; i < n; ++i) {
+        printf("%s\n", namelist[i]->d_name);
+        free(namelist[i]);
+    }
+    free(namelist);
+
+    return 0;
 }
 
-int run (char *command_args[], int args_size) {
-    fflush (stdout);            // Flush output before forking
+int str_isalphanum(char *name) {
+    for (char c = *name; c != '\0'; c = *++name) {
+        if (!(isdigit(c) || isalpha(c))) return 0;
+    }
+    return 1;
+}
 
-    pid_t pid = fork ();
-    if (pid < 0) {
+int my_mkdir(char *name) {
+    int must_free = 0;
+
+    debug("my_mkdir: ->%s<-\n", name);
+
+    if (name[0] == '$') {
+        ++name;
+        // lookup name
+        name = mem_get_value(name);
+        debug("  lookup: %s\n", name ? name : "(NULL)");
+        if (name) {
+            // name exists, should free whatever we got
+            must_free = 1;
+        }
+    }
+    if (!name || !str_isalphanum(name)) {
+        // either name doesn't exist, or isn't valid, error.
+        if (must_free) free(name);
+        return badcommandMkdir();
+    }
+    // at this point name is definitely OK
+
+    // 0777 means "777 in octal," aka 511. This value means
+    // "give the new folder all permissions that we can."
+    int result = mkdir(name, 0777);
+
+    if (result) {
+        // description doesn't specify what to do in this case,
+        // (including if the directory already exists)
+        // so we just give an error message on stderr and ignore it.
+        perror("Something went wrong in my_mkdir");
+    }
+
+    if (must_free) free(name);
+    return 0;
+}
+
+int touch(char *path) {
+    // we're told we can assume this.
+    assert(str_isalphanum(path));
+    // if things go wrong, just ignore it.
+    FILE *f = fopen(path, "a");
+    fclose(f);
+    return 0;
+}
+
+int cd(char *path) {
+    // we're told we can assume this.
+    assert(str_isalphanum(path));
+
+    int result = chdir(path);
+    if (result) {
+        // chdir can fail for several reasons, but the only one we need
+        // to handle here for the spec is the ENOENT reason,
+        // aka Error NO ENTry -- the directory doesn't exist.
+        // Since that's the only one we have to handle, we'll just assume
+        // that that's what happened.
+        // Alternatively, you can check if the directory exists
+        // explicitly first using `stat`. However it is often better to
+        // simply try to use a filesystem resource and then recover when
+        // you can't, rather than trying to validate first. If you validate
+        // first while two users are on the system, there's a race condition!
+        return badcommandCd();
+    }
+    return 0;
+}
+
+void runSchedule(struct queue *q, const struct schedule_policy *policy) {
+    struct PCB *next_pcb = policy->dequeue(q);
+    while (next_pcb) {
+        next_pcb = policy->run_pcb(next_pcb);
+        if (next_pcb) policy->enqueue(q, next_pcb);
+        next_pcb = policy->dequeue(q);
+    }
+}
+
+struct PCB *run_pcb_to_completion(struct PCB *pcb) {
+    while (pcb_has_next_instruction(pcb)) {
+        size_t instr = pcb_next_instruction(pcb);
+        parseInput(get_line(instr));
+    }
+    free_pcb(pcb);
+    return NULL;
+}
+
+struct PCB *run_pcb_for_n_steps(struct PCB *pcb, size_t n) {
+    debug("run n steps: n is %ld\n", n);
+    for (; n && pcb_has_next_instruction(pcb); --n) {
+        parseInput(get_line(pcb_next_instruction(pcb)));
+    }
+    debug("run n steps: looped to %ld\n", n);
+    // The loop runs until either we've done n steps or the pcb is out of
+    // instructions,  whichever happens first. But they might also happen
+    // at the same time, in which case we should still clean up.
+    // So check if there are more instructions, not the value of n.
+    if (pcb_has_next_instruction(pcb)) {
+        return pcb;
+    } else {
+        free_pcb(pcb);
+        return NULL;
+    }
+}
+
+int source(char *script) {
+    char *args[2] = {script, "FCFS"};
+    return my_exec(args, 2);
+}
+
+// These are all global variables because they are not local to any particular
+// call to exec. Once we go into background or into MT mode,
+// the behavior of future calls is affected.
+// Those calls also need to be able to see the existing queue.
+// They could be defined `static` inside my_exec as well, but defining them
+// outside allows the possibility for other functions to also care about
+// the background state, which was useful in older versions of the assignment.
+// Despite the top-level availability of these variables, global state is
+// rather confusing to work with. So functions like runSchedule() above
+// still take these values as arguments so they're easier to track.
+static int background = false;
+static struct queue *q = NULL;
+static const struct schedule_policy *policy = NULL;
+
+int my_exec(char *args[], int args_size) {
+    // Two inputs is the minimum. This should be checked above, but sanity:
+    assert(args_size >= 2);
+    // This exec call originates from a backgrounded shell script
+    // if background is already true. We might update background later,
+    // but we need to know if it was true when we started as well.
+    int background_exec = background;
+    // We don't know how many file names were passed, but we do know that
+    // we have to look for specific strings at the end.
+    // We technically have a choice here, because the assignment didn't
+    // specify: is `exec prog1 RR #` a single program, with RR and #
+    // policies? Or is it two programs, prog1 and RR, with the invalid
+    // policy name #?
+    // Obviously, the intent of the description is that policy names,
+    // as well as #, are "special" when in the right order and at the
+    // end of the inputs even though they are all valid filenames.
+    // So the only reasonable choice here is to treat it as a single
+    // program, with RR and # policies.
+    // Of course, we don't test programs named RR or #, so this is a
+    // philosophical point. But the syntax makes RR and # special only
+    // when passed in the right order and as the last inputs.
+    //
+    // So we check for policy names and # by looking at the end
+    // of the inputs, rather than trying to check for files first.
+
+
+    // We check from the end, so we have to check in reverse order.
+    // Now look for #.
+    if (strcmp(args[args_size-1], "#") == 0) {
+        background = true;
+        args_size--; // effectively remove "#" from the arguments.
+    }
+    // At this point, there must be at least two arguments;
+    // a filename, and a policy. Similarly there are at most 4.
+    // With the optional #, it was harder
+    // to tell that we were given well-formed input. But now we can check.
+    // (It was safe to check for # because we know there were at
+    // least two arguments at the top, so decrementing args_size
+    // was perfectly fine.)
+    if (args_size < 2 || args_size > 4) {
+        return badcommand();
+    }
+    // Now the last argument is the policy name.
+    char *policy_name = args[args_size-1];
+    args_size--;
+    // Now the args,args_size array describes exactly the filenames.
+    // We know the policy name now, so retrieve the actual policy.
+    policy = get_policy(policy_name);
+    if (!policy) {
+        printf("Bad command: unknown scheduling policy\n");
         return 1;
     }
-    if (pid == 0) {             // Child process
-        command_args[args_size] = NULL;
-        execvp (command_args[0], command_args);
-        exit (1);
-    } else {                    // Parent process
-        int status;
-        waitpid (pid, &status, 0);
-        if (WIFEXITED (status)) {
-            return WEXITSTATUS (status);
-        } else {
-            return 1;
-        }
-    }
-}
 
-int load_script (char *script) {
-    char line[MAX_USER_INPUT];
-    FILE *p = fopen (script, "rt");
-
-    if (p == NULL) {
-        return -1;
-    }
-
-    int start_index = get_program_line_count ();
-    while (fgets (line, MAX_USER_INPUT - 1, p)) {
-        mem_store_program_line (line);
-    }
-    fclose (p);
-
-    int length = get_program_line_count () - start_index;
-    return pcb_create (start_index, length);
-}
-
-void exec_FCFS (char *scripts[], int args_size) {
-    for (int i = 0; i < args_size - 1; i++) {
-        int pid = load_script (scripts[i]);
-        struct PCB *pcb = pcb_get (pid);
-        ready_queue_add (pcb);
-    }
-    scheduler_run ();
-}
-
-void exec_RR (char *scripts[], int args_size, int steps) {
-    for (int i = 0; i < args_size - 1; i++) {
-        int pid = load_script (scripts[i]);
-        struct PCB *pcb = pcb_get (pid);
-        ready_queue_add (pcb);
-    }
-    while (!ready_queue_is_empty ()) {
-        struct PCB *pcb = ready_queue_remove ();
-
-        int lines_executed = 0;
-        while (pcb->program_counter < pcb->length && lines_executed < steps) {  // execute steps # of lines
-            char *line =
-                mem_get_program_line (pcb->start + pcb->program_counter);
-            if (line == NULL) {
-                break;          // Invalid line
-            }
-            parseInput (line);
-            pcb_update_program_counter (pcb->pid, pcb->program_counter + 1);
-            lines_executed++;
-        }
-
-        if (pcb->program_counter < pcb->length) {
-            ready_queue_add (pcb);      // add process back to ready-queue if not finished
-        } else {
-            scheduler_cleanup (pcb);    // process finished
-        }
-    }
-}
-
-int exec (char *command_args[], int args_size) {
-    char *policy = command_args[args_size - 1];
-    int is_background = 0;      // indicates if background mode (0 = false, 1 = true)
-
-    if (strcmp (policy, "#") == 0) {    // detected background mode
-        is_background = 1;
-        args_size--;
-        policy = command_args[args_size - 1];
-    }
-    // Check for duplicate scripts
-    for (int i = 0; i < args_size - 1; i++) {
-        for (int j = i + 1; j < args_size - 1; j++) {
-            if (strcmp (command_args[i], command_args[j]) == 0) {
-                printf ("Bad command: duplicate scripts\n");
-                return 1;
-            }
-        }
-    }
-
-    if (is_background == 1) {
-        // Read the rest of input as batch script process
-        char line[MAX_USER_INPUT];
-        int start_index = get_program_line_count ();
-        while (fgets (line, MAX_USER_INPUT - 1, stdin)) {
-            line[strcspn (line, "\r\n")] = 0;
-            mem_store_program_line (line);
-        }
-        int length = get_program_line_count () - start_index;
-        int pid = pcb_create (start_index, length);
-        struct PCB *pcb = pcb_get (pid);
-        ready_queue_add (pcb);
-    }
-    // check which POLICY in last argument
-    if (strcmp (policy, "FCFS") == 0) {
-        exec_FCFS (command_args, args_size);
-    } else if (strcmp (policy, "SJF") == 0) {
-        int SJFindex[args_size - 1];
-        for (int i = 0; i < args_size - 1; i++) {
-            SJFindex[i] = -1;   // Initialize to -1
-        }
-        for (int i = 0; i < args_size - 1; i++) {
-            char line[MAX_USER_INPUT];
-            FILE *p = fopen (command_args[i], "rt");
-
-            if (p == NULL) {
-                return badcommandFileDoesNotExist ();
-            }
-
-            int start_index = get_program_line_count ();
-            // Load the script into program memory
-            while (fgets (line, MAX_USER_INPUT - 1, p)) {
-                mem_store_program_line (line);
-            }
-            fclose (p);
-
-            int length = get_program_line_count () - start_index;
-            int pid = pcb_create (start_index, length);
-
-            // Insert into SJFindex in sorted order
-            int j;
-            for (j = 0; j < args_size - 1; j++) {
-                if (SJFindex[j] == -1) {
-                    SJFindex[j] = pid;
-                    break;
-                }
-                struct PCB *pcb = pcb_get (SJFindex[j]);
-                if (length < pcb->length) {
-                    for (int k = args_size - 2; k >= j; k--) {
-                        SJFindex[k + 1] = SJFindex[k];  // Shift right
-                    }
-                    SJFindex[j] = pid;
-                    break;
-                }
-            }
-        }
-
-        // Add to ready queue in sorted order
-        for (int i = 0; i < args_size - 1 && SJFindex[i] != -1; i++) {
-            struct PCB *pcb = pcb_get (SJFindex[i]);
-            ready_queue_add (pcb);
-        }
-
-        scheduler_run ();
-
-    } else if (strcmp (policy, "RR") == 0) {
-        exec_RR (command_args, args_size, 2);
-    } else if (strcmp (policy, "AGING") == 0) {
-        int SJFindex[args_size - 1];
-        for (int i = 0; i < args_size - 1; i++) {
-            SJFindex[i] = -1;
-        }
-        for (int i = 0; i < args_size - 1; i++) {
-            char line[MAX_USER_INPUT];
-            FILE *p = fopen (command_args[i], "rt");
-
-            if (p == NULL) {
-                return badcommandFileDoesNotExist ();
-            }
-
-            int start_index = get_program_line_count ();
-            // Load the script into program memory
-            while (fgets (line, MAX_USER_INPUT - 1, p)) {
-                mem_store_program_line (line);
-            }
-            fclose (p);
-
-            int length = get_program_line_count () - start_index;
-            int pid = pcb_create (start_index, length);
-
-            if (pid == -1) {
-                return 1;
-            }
-            // Insert into SJFindex in sorted order
-            int j;
-            for (j = 0; j < args_size - 1; j++) {
-                if (SJFindex[j] == -1) {
-                    SJFindex[j] = pid;
-                    break;
-                }
-                struct PCB *pcb = pcb_get (SJFindex[j]);
-                if (length < pcb->length) {
-                    for (int k = args_size - 2; k >= j; k--) {
-                        SJFindex[k + 1] = SJFindex[k];  // Shift right
-                    }
-                    SJFindex[j] = pid;
-                    break;
-                }
-            }
-        }
-        // Add to ready queue in sorted order
-        for (int i = 0; i < args_size - 1 && SJFindex[i] != -1; i++) {
-            struct PCB *pcb = pcb_get (SJFindex[i]);
-            ready_queue_add (pcb);
-        }
-        while (!ready_queue_is_empty ()) {
-            // get process at head of ready queue
-            struct PCB *pcb = ready_queue_remove ();
-
-            // execute 1 instruction
-            char *line =
-                mem_get_program_line (pcb->start + pcb->program_counter);
-            parseInput (line);
-            pcb_update_program_counter (pcb->pid, pcb->program_counter + 1);
-
-            // age all jobs in ready queue
-            struct PCB *current = ready_queue_get_head ();
-            while (current != NULL) {
-                if (current->job_length_score > 0) {
-                    current->job_length_score--;
-                }
-                current = current->next;
-            }
-
-
-            if (pcb->program_counter < pcb->length) {
-                ready_queue_insert (pcb);       // reinsert current job into ready queue if not finished
-            } else {
-                scheduler_cleanup (pcb);
-            }
-        }
-    } else if (strcmp (policy, "RR30") == 0) {
-        exec_RR (command_args, args_size, 30);
+    if (!background_exec) {
+        // In this case, we're a top-level exec call. We might be entering
+        // background mode though. In either case, we should reset the
+        // linememory allocator.
+        reset_linememory_allocator();
+        // We also need to allocate a queue to use.
+        // We own this, so we have to be sure to free it later!
+        assert(!q);
+        q = alloc_queue();
     } else {
-        printf ("Bad command: invalid POLICY\n");
+        // In this case, we're an exec call originating from the background.
+        // Ensure that a queue exists.
+        assert(q);
     }
+
+    // Create a filename for each process, in order, and enqueue them.
+    // We are allocating PCBs, but enqueue transfers ownership of the PCB
+    // to the queue, so we're not responsible for freeing these.
+    for (int n = 0; n < args_size; ++n) {
+        struct PCB *pcb = create_process(args[n]);
+        if (!pcb) {
+            printf("Failed to create process\n");
+            goto cleanup;
+        }
+        policy->enqueue(q, pcb);
+    }
+
+    if (background && !background_exec) {
+        // In this case, background mode is enabled but we're a top-level
+        // exec call. Therefore, we're entering background mode.
+
+        // add the rest of the input to a new program:
+        struct PCB *pcb = create_process_from_FILE(stdin, "bgtest");
+        if (!pcb) {
+            printf("Failed to create STDIN process\n");
+            goto cleanup;
+        }
+        // Ensure that this is scheduled first!
+        policy->enqueue_ignoring_priority(q, pcb);
+    }
+
+    if (!background_exec) {
+        // We should only start the scheduler if we are a top-level exec call.
+        // If we are not top-level, it's already running!
+        runSchedule(q, policy);
+        // After the schedule completes, if we were given the # argument,
+        // the exec should never 'return'. When it's done, so is the batch
+        // mode script we are running. Therefore, if we get here without
+        // invoking quit, we should quit.
+        if (background) {
+            clear_script_map();
+            return quit();
+        }
+        clear_script_map();
+
+        // If we are a top-level exec call,
+        // we can now release the queue we allocated for scheduling.
+top_level_cleanup:
+        free_queue(q);
+        q = NULL;
+        policy = NULL;
+    }
+
+background_cleanup:
+    return 0;
+
+    // This is an unfortunately common error-handling pattern in C.
+    // Without try-catch-finally as a language feature, there isn't a cleaner
+    // way to handle certain kinds of errors.
+    // This is essentially implementing a 'finally' block that guarantees
+    // the queue allocated for top-level exec calls is freed.
+    // Note that, if this is not a top-level exec call, we will not free
+    // anything at all. That means this program might not behave as expected:
+    //   exec P1 P2 #
+    //   exec P3 P1
+    //   quit
+    // The schedule will end up containing P1, P2, _and_ P3, because the
+    // background exec will refuse to allocate a second PCB for P1 but
+    // will not de-allocate the PCB it already made for P3.
+    // We are told we may handle corner cases however we like, so that's fine.
+cleanup:
+    if (background_exec) goto background_cleanup;
+    else                 goto top_level_cleanup;
+}
+
+int run(char *argv[], int args_size) {
+    // Need to make sure we have space to put a null pointer at the end
+    // of args. From the definition of parseInput in shell, we might observe
+    // that there's definitely space to just write one there... but that's
+    // very bad separation of concerns. Instead we just take the time to
+    // copy it here, into an array that we are certain, locally, has space.
+    char *args[MAX_ARGS_SIZE] = {0};
+    // first arg is the thing to execute, it's _also_ going to be args[0].
+    char *file = argv[0];
+
+    assert(args_size <= 6);
+
+    int ix = 0;
+    for ( ; ix < args_size; ++ix) {
+        args[ix] = argv[ix];
+    }
+    args[ix] = NULL;
+
+    pid_t pid = fork();
+    if (pid == -1) {
+        perror("Fork failed");
+    }
+    else if (pid > 0) {
+        int status;
+        waitpid(pid, &status, 0);
+    } else {
+        // we are the child process
+        execvp(file, args);
+        // exec never returns, so we are only here if something went wrong.
+        perror("Exec failed");
+        exit(EXIT_FAILURE);
+    }
+
     return 0;
 }
