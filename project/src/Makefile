@@ -1,6 +1,7 @@
 CC=gcc
 #CFLAGS=-g -O0 #-DNDEBUG
 CFLAGS=-DNDEBUG
+FMT=indent
 
 mysh: shell.c interpreter.c shellmemory.c
 	$(CC) $(CFLAGS) -c shell.c interpreter.c shellmemory.c pcb.c queue.c schedule_policy.c

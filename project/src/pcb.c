@@ -1,25 +1,25 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h> // memset
-#include "shell.h" // MAX_USER_INPUT
+#include <string.h>             // memset
+#include "shell.h"              // MAX_USER_INPUT
 #include "shellmemory.h"
 #include "pcb.h"
 
 // Structure to track loaded scripts
 struct LoadedScripts {
     char *filename;
-    size_t line_base;
-    size_t line_count;
+    size_t page_count;
+    size_t *page_table;
     struct LoadedScripts *next;
 };
 
 static struct LoadedScripts *script_map = NULL;
 
 // Check if a script is already loaded
-static struct LoadedScripts *find_script(const char *filename) {
+static struct LoadedScripts *find_script (const char *filename) {
     struct LoadedScripts *current = script_map;
     while (current) {
-        if (strcmp(current->filename, filename) == 0) {
+        if (strcmp (current->filename, filename) == 0) {
             return current;
         }
         current = current->next;
@@ -28,78 +28,87 @@ static struct LoadedScripts *find_script(const char *filename) {
 }
 
 // Register a newly loaded script
-static void load_script(const char *filename, size_t base, size_t count) {
-    struct LoadedScripts *new_script = malloc(sizeof(struct LoadedScripts));
-    new_script->filename = strdup(filename);
-    new_script->line_base = base;
-    new_script->line_count = count;
-    new_script->next = script_map;
+static void load_script (const char *filename, size_t *page_table,
+                         size_t page_count) {
+    struct LoadedScripts *new_script = malloc (sizeof (struct LoadedScripts));
+    new_script->filename = strdup (filename);
+    new_script->page_table = page_table;
+    new_script->page_count = page_count;
+    new_script->next = script_map;      // append existing script_map to new_script
     script_map = new_script;
 }
 
-void clear_script_map() {
+void clear_script_map () {
     struct LoadedScripts *current = script_map;
     while (current) {
         struct LoadedScripts *next = current->next;
-        free(current->filename);
-        free(current);
+        free (current->filename);
+        free (current);
         current = next;
     }
     script_map = NULL;
 }
 
-int pcb_has_next_instruction(struct PCB *pcb) {
+int pcb_has_next_instruction (struct PCB *pcb) {
     // have next if pc < line_count.
     // Sanity check: count = 0  ==> never have next. Good!
     return pcb->pc < pcb->line_count;
 }
 
-size_t pcb_next_instruction(struct PCB *pcb) {
-    size_t i = pcb->line_base + pcb->pc;
+size_t pcb_next_instruction (struct PCB *pcb) {
+    size_t virtual_line = pcb->pc;
+    size_t page = virtual_line / FRAME_SIZE;
+    size_t offset = virtual_line % FRAME_SIZE;
+
+    if (page >= pcb->page_count) {
+        return (size_t) -1;     // Invalid instruction
+    }
+
+    size_t frame = pcb->page_table[page];
     pcb->pc++;
-    return i;
+    return frame + offset;
 }
 
-struct PCB *create_process(const char *filename) {
+static pid fresh_pid = 1;
+
+struct PCB *create_process (const char *filename) {
     // We have 2 main tasks:
     // load all the code in the script file into shellmemory, and
     // allocate+fill a PCB.
-    struct LoadedScripts *existing = find_script(filename);
-    struct PCB *pcb = malloc(sizeof(struct PCB));
-    static pid fresh_pid = 1;
-    pcb->pid = fresh_pid++;
-    pcb->name = strdup(filename);
-    pcb->next = NULL;
-    pcb->pc = 0;
+    struct LoadedScripts *existing = find_script (filename);
+    struct PCB *pcb = malloc (sizeof (struct PCB));
+
 
     if (existing) {
-        pcb->line_base = existing->line_base;
-        pcb->line_count = existing->line_count;
+        pcb->pid = fresh_pid++;
+        pcb->name = strdup (filename);
+        pcb->next = NULL;
+        pcb->pc = 0;
+        //pcb->line_base = existing->line_base;
+        pcb->page_count = existing->page_count;
+        pcb->page_table = existing->page_table;
     } else {
-        FILE *script = fopen(filename, "rt");
+        FILE *script = fopen (filename, "rt");
         if (!script) {
-            perror("Failed to open file for create_process");
-            free(pcb);
+            perror ("Failed to open file for create_process");
+            free (pcb);
             return NULL;
         }
-        pcb = create_process_from_FILE(script, filename);
-        fclose(script);
+        pcb = create_process_from_FILE (script, filename);
+        fclose (script);
     }
     pcb->duration = pcb->line_count;
     return pcb;
 }
 
-struct PCB *create_process_from_FILE(FILE *script, const char *filename) {
+struct PCB *create_process_from_FILE (FILE * script, const char *filename) {
     // We can open the file, so we'll be making a process.
-    struct PCB *pcb = malloc(sizeof(struct PCB));
+    struct PCB *pcb = malloc (sizeof (struct PCB));
 
-    // The PID is the only weird part. They need to be distinct,
-    // so let's use a static counter.
-    static pid fresh_pid = 1;
     pcb->pid = fresh_pid++;
 
     // name should be the empty string, according to doc comment.
-    pcb->name = strdup(filename);
+    pcb->name = strdup ("");
     // next should be NULL, according to doc comment.
     pcb->next = NULL;
 
@@ -113,48 +122,81 @@ struct PCB *create_process_from_FILE(FILE *script, const char *filename) {
     // If we don't do this, and the loop below never runs, base would be
     // unitialized, which would be catastrophic.
     pcb->line_count = 0;
-    pcb->line_base = 0;
 
-    // We're told to assume lines of files are limited to 100 characters.
-    // That's all well and good, but for implementing # we need to read
-    // actual user input, and _that_ is limited to 1000 characters.
-    // It's unclear if we should assume it's also limited to 100 for this
-    // purpose. If you did assume that, that's OK! We didn't.
+    size_t line_count = 0;
+
+    // Count lines first to determine page count
     char linebuf[MAX_USER_INPUT];
-    while (!feof(script)) {
-        memset(linebuf, 0, sizeof(linebuf));
-        fgets(linebuf, MAX_USER_INPUT, script);
+    while (!feof (script)) {
+        memset (linebuf, 0, sizeof (linebuf));
+        fgets (linebuf, MAX_USER_INPUT, script);
+        if (linebuf[0] != '\0')
+            line_count++;
+    }
+    rewind (script);
 
-        size_t index = allocate_line(linebuf);
-        // If we've run out of memory, clean up the partially-allocated
-        // pcb and return NULL.
-        if (index == (size_t)(-1)) {
-            free_pcb(pcb);
-            return NULL;
+    size_t page_count = (line_count + FRAME_SIZE - 1) / FRAME_SIZE;
+    size_t *page_table = malloc (page_count * sizeof (size_t));
+    pcb->page_count = page_count;
+    pcb->page_table = page_table;
+    pcb->line_count = line_count;
+
+    size_t index;
+    size_t current_page = 0;
+    size_t frame_line_count = 0;
+
+    while (!feof (script)) {
+        memset (linebuf, 0, sizeof (linebuf));
+        fgets (linebuf, MAX_USER_INPUT, script);
+
+        if (frame_line_count == 0) {    // starting from new page
+            index = find_free_frame ();
+
+            // If we've run out of memory, clean up the partially-allocated
+            // pcb and return NULL.
+            if (index == (size_t) (-1)) {
+                free_pcb (pcb);
+                fclose (script);
+                return NULL;
+            }
+            pcb->page_table[current_page] = index;      // map page to line frame store
         }
 
-        if (pcb->line_count == 0) {
-            // do this on the first iteration only.
-            pcb->line_base = index;
+        load_frame_line (linebuf, (index + frame_line_count));  // load line into frame (base + offset)
+        frame_line_count++;
+
+        if (frame_line_count == FRAME_SIZE) {   // exceeded current frame size, need new frame
+            current_page++;
+            frame_line_count = 0;
         }
-        pcb->line_count++;
+
     }
 
-    load_script(filename, pcb->line_base, pcb->line_count);
+    load_script (filename, pcb->page_table, pcb->page_count);
     // duration should initially match line_count.
     pcb->duration = pcb->line_count;
 
     return pcb;
 }
 
-void free_pcb(struct PCB *pcb) {
-    for (size_t ix = pcb->line_base; ix < pcb->line_base + pcb->line_count; ++ix) {
-        free_line(ix);
+void free_pcb (struct PCB *pcb) {
+    // Only free frames if this is the original process
+    if (strcmp (pcb->name, "") != 0) {
+        struct LoadedScripts *script = find_script (pcb->name);
+        if (script && script->page_table == pcb->page_table) {
+            // Original process - free frames and page table
+            for (size_t i = 0; i < pcb->page_count; i++) {
+                for (size_t offset = 0; offset < FRAME_SIZE; offset++) {
+                    size_t index = pcb->page_table[i];
+                    free_line (index + offset);
+                }
+            }
+            free (pcb->page_table);
+        }
     }
-    // Free the process name, but only if it's not the empty string.
-    // The empty name (for the shell input process) was not malloc'd.
-    if (strcmp("", pcb->name)) {
-        free(pcb->name);
+
+    if (strcmp ("", pcb->name)) {
+        free (pcb->name);
     }
-    free(pcb);
+    free (pcb);
 }

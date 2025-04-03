@@ -1,6 +1,6 @@
 #pragma once
 #include <stddef.h>
-#include <stdio.h> // FILE
+#include <stdio.h>              // FILE
 
 typedef size_t pid;
 
@@ -23,8 +23,11 @@ struct PCB {
     // Base+count form a base-bounds pair for the "memory allocated"
     // to this process. Seeing it this way helps see how we can replace
     // it with pseudo-paging later. Spoilers!
-    size_t line_base;
+    /*size_t line_base; */
     size_t line_count;
+
+    size_t *page_table;
+    size_t page_count;
 
     // This field is used for SJF and aging, and should initially have
     // the same value as line_count.
@@ -46,26 +49,25 @@ struct PCB {
     struct PCB *next;
 };
 
-static struct LoadedScripts *find_script(const char *filename);
+static struct LoadedScripts *find_script (const char *filename);
 
-static void load_script(const char *filename, size_t base, size_t count);
+static void load_script (const char *filename, size_t *page_table,
+                         size_t page_count);
 
-void clear_script_map();
+void clear_script_map ();
 // Returns non-zero iff there are more instructions to execute.
-int pcb_has_next_instruction(struct PCB *pcb);
+int pcb_has_next_instruction (struct PCB *pcb);
 // Get the shellmemory index of the next instruction, and increment pc.
-size_t pcb_next_instruction(struct PCB *pcb);
+size_t pcb_next_instruction (struct PCB *pcb);
 // Create a new process from the given filename:
 //   1. Allocates a new PCB
 //   2. Loads the code from the script file into shellmemory
 //   3. Does NOT enqueue the PCB to any scheduling queue (next is NULL)
-struct PCB *create_process(const char *filename);
+struct PCB *create_process (const char *filename);
 // Like create_process, but takes a FILE* directly.
 // Ownership of the FILE* is taken and it will be closed.
-struct PCB *create_process_from_FILE(FILE *f, const char *filename);
+struct PCB *create_process_from_FILE (FILE * f, const char *filename);
 // Cleanup a process:
 //   1. Free all shellmemory used by the process code
 //   2. Free the PCB
-void free_pcb(struct PCB *pcb);
-
-
+void free_pcb (struct PCB *pcb);

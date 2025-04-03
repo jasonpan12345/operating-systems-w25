@@ -18,7 +18,7 @@
 // When a line is saved, it should be copied. This way, it can be saved from
 // a stack-allocated buffer without fear of losing it when the buffer is freed.
 struct program_line {
-    int allocated; // for sanity-checking
+    int allocated;              // for sanity-checking
     char *line;
 };
 
@@ -58,9 +58,9 @@ size_t next_free_line = 0;
 // program might not fit in the first hole! So we provide a function to reset
 // this, which should be called whenever `exec` is called and we're not in
 // 'background mode.'
-void reset_linememory_allocator() {
+void reset_linememory_allocator () {
     next_free_line = 0;
-    assert_linememory_is_empty();
+    assert_linememory_is_empty ();
 }
 
 // The comments above detail an important, nontrivial invariant, that the
@@ -68,50 +68,67 @@ void reset_linememory_allocator() {
 // For sanity checking, we provide an additional function to assert that the
 // the linememory is empty.
 
-void assert_linememory_is_empty() {
+void assert_linememory_is_empty () {
     for (size_t i = 0; i < MEM_SIZE; ++i) {
-        assert(!linememory[i].allocated);
-        assert(linememory[i].line == NULL);
+        assert (!linememory[i].allocated);
+        assert (linememory[i].line == NULL);
     }
 }
 
 // note that init_linemem is not exposed from the header.
 // We made init_mem call init_linemem, down below.
-void init_linemem() {
+void init_linemem () {
     for (size_t i = 0; i < MEM_SIZE; ++i) {
         linememory[i].allocated = false;
         linememory[i].line = NULL;
     }
 }
 
-size_t allocate_line(const char *line) {
+size_t allocate_line (const char *line) {
     if (next_free_line >= MEM_SIZE) {
         // out of memory!
-        return (size_t)(-1);
+        return (size_t) (-1);
     }
     size_t index = next_free_line++;
-    assert(!linememory[index].allocated);
+    assert (!linememory[index].allocated);
 
     linememory[index].allocated = true;
     // As described above, the allocator is only borrowing the string passed to it,
     // but linememory must own all strings it contains, so we need to copy the
     // string. (If you don't know what that means, see [Note: OBS].)
-    linememory[index].line = strdup(line);
+    linememory[index].line = strdup (line);
     return index;
+}
+
+size_t find_free_frame () {
+    // search through entire linememory by steps of FRAME_SIZE
+    for (size_t i = 0; i < MEM_SIZE; i += FRAME_SIZE) {
+        if (!linememory[i].allocated) { // found unallocated frame
+            return i;
+        }
+    }
+    return (size_t) (-1);
+}
+
+void load_frame_line (const char *line, size_t index) {
+    assert (!linememory[index].allocated);
+
+    linememory[index].allocated = true;
+    linememory[index].line = strdup (line);
 }
 
 // To free a line, we must deallocate it and mark it unused.
 // We don't mess with next_free_line for the reasons described above.
-void free_line(size_t index) {
-    free(linememory[index].line);
+void free_line (size_t index) {
+    free (linememory[index].line);
     linememory[index].allocated = false;
     linememory[index].line = NULL;
 }
 
 // Return a const pointer to ensure the caller doesn't do something horrific,
 // like try to free it.
-const char *get_line(size_t index) {
-    assert(linememory[index].allocated);
+const char *get_line (size_t index) {
+    assert (linememory[index].allocated);
     return linememory[index].line;
 }
 
@@ -137,62 +154,64 @@ struct memory_struct {
 struct memory_struct shellmemory[MEM_SIZE];
 
 // Helper functions
-int match(char *model, char *var) {
-    int i, len = strlen(var), matchCount = 0;
+int match (char *model, char *var) {
+    int i, len = strlen (var), matchCount = 0;
     for (i = 0; i < len; i++) {
-        if (model[i] == var[i]) matchCount++;
+        if (model[i] == var[i])
+            matchCount++;
     }
     if (matchCount == len) {
         return 1;
-    } else return 0;
+    } else
+        return 0;
 }
 
 // Shell memory functions
 
-void mem_init(){
+void mem_init () {
     int i;
-    for (i = 0; i < MEM_SIZE; i++) {		
+    for (i = 0; i < MEM_SIZE; i++) {
         // Include a character that's impossible to type so that
         // we don't mistake an empty entry for an entry named 'none'.
-        shellmemory[i].var   = "none\1";
+        shellmemory[i].var = "none\1";
         shellmemory[i].value = "none";
     }
 
-    init_linemem();
+    init_linemem ();
 }
 
 // Set key value pair
-void mem_set_value(char *var_in, char *value_in) {
+void mem_set_value (char *var_in, char *value_in) {
     int i;
 
     for (i = 0; i < MEM_SIZE; i++) {
-        if (strcmp(shellmemory[i].var, var_in) == 0) {
-            free(shellmemory[i].value);
-            shellmemory[i].value = strdup(value_in);
+        if (strcmp (shellmemory[i].var, var_in) == 0) {
+            free (shellmemory[i].value);
+            shellmemory[i].value = strdup (value_in);
             return;
-        } 
+        }
     }
 
     //Value does not exist, need to find a free spot.
     for (i = 0; i < MEM_SIZE; i++) {
-        if (strcmp(shellmemory[i].var, "none\1") == 0) {
-            shellmemory[i].var   = strdup(var_in);
-            shellmemory[i].value = strdup(value_in);
+        if (strcmp (shellmemory[i].var, "none\1") == 0) {
+            shellmemory[i].var = strdup (var_in);
+            shellmemory[i].value = strdup (value_in);
             return;
-        } 
+        }
     }
 
     return;
 }
 
 //get value based on input key
-char *mem_get_value(char *var_in) {
+char *mem_get_value (char *var_in) {
     int i;
 
     for (i = 0; i < MEM_SIZE; i++) {
-        if (strcmp(shellmemory[i].var, var_in) == 0){
-            return strdup(shellmemory[i].value);
-        } 
+        if (strcmp (shellmemory[i].var, var_in) == 0) {
+            return strdup (shellmemory[i].value);
+        }
     }
     return NULL;
 }
