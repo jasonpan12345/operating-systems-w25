@@ -28,6 +28,7 @@ struct PCB {
 
     size_t *page_table;
     size_t page_count;
+    char *filename;
 
     // This field is used for SJF and aging, and should initially have
     // the same value as line_count.
@@ -52,7 +53,7 @@ struct PCB {
 static struct LoadedScripts *find_script (const char *filename);
 
 static void load_script (const char *filename, size_t *page_table,
-                         size_t page_count);
+                         size_t page_count, size_t line_count);
 
 void clear_script_map ();
 // Returns non-zero iff there are more instructions to execute.
@@ -71,3 +72,5 @@ struct PCB *create_process_from_FILE (FILE * f, const char *filename);
 //   1. Free all shellmemory used by the process code
 //   2. Free the PCB
 void free_pcb (struct PCB *pcb);
+
+void load_frame (struct PCB *pcb);

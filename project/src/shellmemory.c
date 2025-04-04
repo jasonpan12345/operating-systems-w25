@@ -24,33 +24,6 @@ struct program_line {
 
 struct program_line linememory[MEM_SIZE];
 
-// We have two choices:
-//  1. Offer an API that lets the client allocate one line at a time.
-//  2. Offer an API that allocates whole programs at a time, and tracks their
-//      locations for being freed later.
-// (2) sounds harder, and it is, but that work needs to be done _somewhere_.
-// The description suggests that rather than doing it here, we can do it in
-// the PCB, so we'll do that. This will translate better to having page tables
-// in PCBs in part 3 so it's probably the more sensible approach.
-
-// Therefore, our API is to allocate one line at a time. Normally, we'd have
-// to worry about fragmentation and contiguity, but, we're supposed to allocate
-// everything before anything runs, and everything runs to completion before
-// any more commands can execute, AND there's no recursive source/exec.
-// All of that combined means we don't have to worry about fragmentation
-// at all: between invocations of source/exec, the linememory will be EMPTY!
-//
-// Actually, there is one case of 'recursive' exec: the tests that look like
-//   exec .... #
-//   echo shell
-//   exec ....
-// The 'shell program' will recursively exec. The correct behavior in these
-// cases is to enqueue new program(s), not run them to completion immediately.
-// We're told we can assume that 1000 lines is enough to hold every program
-// that is being tested simultaneously, so we won't worry about the condition
-// that the linememory is empty once exec has been called with #.
-// At that point, the assumption tells us that there is enough memory left.
-
 size_t next_free_line = 0;
 // So we simply record the next free index in a variable.
 // We can't reset this whenever a PCB is freed, because we might be running
@@ -84,20 +57,8 @@ void init_linemem () {
     }
 }
 
-size_t allocate_line (const char *line) {
-    if (next_free_line >= MEM_SIZE) {
-        // out of memory!
-        return (size_t) (-1);
-    }
-    size_t index = next_free_line++;
-    assert (!linememory[index].allocated);
-
-    linememory[index].allocated = true;
-    // As described above, the allocator is only borrowing the string passed to it,
-    // but linememory must own all strings it contains, so we need to copy the
-    // string. (If you don't know what that means, see [Note: OBS].)
-    linememory[index].line = strdup (line);
-    return index;
+int line_allocated (size_t index) {
+    return linememory[index].allocated;
 }
 
 size_t find_free_frame () {

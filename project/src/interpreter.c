@@ -416,7 +416,13 @@ struct PCB *run_pcb_to_completion (struct PCB *pcb) {
 struct PCB *run_pcb_for_n_steps (struct PCB *pcb, size_t n) {
     debug ("run n steps: n is %ld\n", n);
     for (; n && pcb_has_next_instruction (pcb); --n) {
-        parseInput (get_line (pcb_next_instruction (pcb)));
+        size_t next_line = pcb_next_instruction (pcb);
+
+        if (next_line == (size_t) -1) {
+            break;
+        }
+        
+        parseInput (get_line (next_line));
     }
     debug ("run n steps: looped to %ld\n", n);
     // The loop runs until either we've done n steps or the pcb is out of
