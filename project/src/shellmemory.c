@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "shellmemory.h"
+#include "pcb.h"
 
 #define true 1
 #define false 0
@@ -23,6 +24,7 @@ struct program_line {
 };
 
 struct program_line linememory[MEM_SIZE];
+size_t *frame_map[MAX_FRAMES];
 
 size_t next_free_line = 0;
 // So we simply record the next free index in a variable.
@@ -57,6 +59,12 @@ void init_linemem () {
     }
 }
 
+void init_frame_map () {
+    for (size_t i = 0; i < MAX_FRAMES; i++) {
+        frame_map[i] = NULL;
+    }
+}
+
 int line_allocated (size_t index) {
     return linememory[index].allocated;
 }
@@ -72,18 +80,30 @@ size_t find_free_frame () {
 }
 
 void load_frame_line (const char *line, size_t index) {
-    assert (!linememory[index].allocated);
+    if (index >= MEM_SIZE)
+        return;                 // Safety check
+    if (linememory[index].allocated) {
+        free_line (index);      // Clean up if already allocated
+    }
 
     linememory[index].allocated = true;
     linememory[index].line = strdup (line);
 }
 
+void map_frame_to_pt (size_t frame, size_t *page_table) {
+    if (frame < MEM_SIZE) {     // Ensure frame is valid
+        frame_map[frame / FRAME_SIZE] = page_table;
+    }
+}
+
 // To free a line, we must deallocate it and mark it unused.
 // We don't mess with next_free_line for the reasons described above.
 void free_line (size_t index) {
-    free (linememory[index].line);
-    linememory[index].allocated = false;
-    linememory[index].line = NULL;
+    if (linememory[index].allocated) {
+        free (linememory[index].line);
+        linememory[index].allocated = false;
+        linememory[index].line = NULL;
+    }
 }
 
 // Return a const pointer to ensure the caller doesn't do something horrific,
@@ -139,6 +159,7 @@ void mem_init () {
     }
 
     init_linemem ();
+    init_frame_map ();
 }
 
 // Set key value pair

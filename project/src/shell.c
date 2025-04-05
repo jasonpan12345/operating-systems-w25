@@ -9,7 +9,8 @@
 
 // Start of everything
 int main (int argc, char *argv[]) {
-    printf ("Frame Store Size = %d; Variable Store Size = %d\n\n", MEM_SIZE, VAR_SIZE);
+    printf ("Frame Store Size = %d; Variable Store Size = %d\n\n", MEM_SIZE,
+            VAR_SIZE);
 
     char prompt = '$';          // Shell prompt
     char userInput[MAX_USER_INPUT];     // user's input stored here

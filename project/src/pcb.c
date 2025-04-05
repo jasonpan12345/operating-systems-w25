@@ -67,8 +67,6 @@ size_t pcb_next_instruction (struct PCB *pcb) {
     }
 
     if (pcb->page_table[page] == (size_t) -1) {
-        // printf("Page fault!\n");
-        // printf("Victim page contents: page %zu, offset %zu\n", page, offset);
         load_frame (pcb);
         return (size_t) -1;     // line not allocated
     }
@@ -91,10 +89,9 @@ struct PCB *create_process (const char *filename) {
     if (existing) {
         pcb->pid = fresh_pid++;
         pcb->name = strdup (filename);
-        pcb->filename = strdup(filename);
+        pcb->filename = strdup (filename);
         pcb->next = NULL;
         pcb->pc = 0;
-        //pcb->line_base = existing->line_base;
         pcb->page_count = existing->page_count;
         pcb->page_table = existing->page_table;
         pcb->line_count = existing->line_count;
@@ -119,8 +116,8 @@ struct PCB *create_process_from_FILE (FILE * script, const char *filename) {
     pcb->pid = fresh_pid++;
 
     // name should be the empty string, according to doc comment.
-    pcb->name = strdup("");
-    pcb->filename = strdup(filename);
+    pcb->name = strdup ("");
+    pcb->filename = strdup (filename);
     // next should be NULL, according to doc comment.
     pcb->next = NULL;
 
@@ -151,18 +148,16 @@ struct PCB *create_process_from_FILE (FILE * script, const char *filename) {
     size_t *page_table = malloc (page_count * sizeof (size_t));
     // Initialize all values to -1
     for (size_t i = 0; i < page_count; i++) {
-        page_table[i] = (size_t)-1;
+        page_table[i] = (size_t) -1;
     }
 
     pcb->page_count = page_count;
     pcb->page_table = page_table;
     pcb->line_count = line_count;
 
-    
-
     size_t pages_to_load;
 
-    if (page_count < 2) {   // load at most 2 pages
+    if (page_count < 2) {       // load at most 2 pages
         pages_to_load = page_count;
     } else {
         pages_to_load = 2;
@@ -170,24 +165,28 @@ struct PCB *create_process_from_FILE (FILE * script, const char *filename) {
 
     size_t current_line = 0;
 
-    for (size_t page = 0; page < pages_to_load; page++) { // load each page into the frame store
-        size_t page_base = find_free_frame();
+    for (size_t page = 0; page < pages_to_load; page++) {       // load each page into the frame store
+        size_t page_base = find_free_frame ();
 
         // If we've run out of memory, clean up the partially-allocated
         // pcb and return NULL.
-        if (page_base == (size_t)(-1)) { 
-            free_pcb(pcb);
-            fclose(script);
-            return NULL;
-        }
-        
+        // if (page_base == (size_t)(-1)) { 
+        //     printf("ran out of memory for: %s\n", filename);
+        //     free_pcb(pcb);
+        //     fclose(script);
+        //     return NULL;
+        // }
+
         pcb->page_table[page] = page_base;
-        
+        map_frame_to_pt (page_base, pcb->page_table);   // map frame to page table
+
         // Load all lines in this page
-        for (size_t offset = 0; offset < FRAME_SIZE && current_line < line_count; offset++, current_line++) {
-            memset(linebuf, 0, sizeof(linebuf));
-            fgets(linebuf, MAX_USER_INPUT, script);
-            load_frame_line(linebuf, page_base + offset);
+        for (size_t offset = 0;
+             offset < FRAME_SIZE && current_line < line_count;
+             offset++, current_line++) {
+            memset (linebuf, 0, sizeof (linebuf));
+            fgets (linebuf, MAX_USER_INPUT, script);
+            load_frame_line (linebuf, page_base + offset);
         }
     }
 
@@ -199,60 +198,95 @@ struct PCB *create_process_from_FILE (FILE * script, const char *filename) {
 }
 
 void free_pcb (struct PCB *pcb) {
+    //printf("freeing %s\n", pcb->filename);
     // Only free frames if this is the original process
-    if (strcmp (pcb->name, "") != 0) {
-        struct LoadedScripts *script = find_script (pcb->name);
-        if (script && script->page_table == pcb->page_table) {
-            // Original process - free frames and page table
-            for (size_t i = 0; i < pcb->page_count; i++) {
-                for (size_t offset = 0; offset < FRAME_SIZE; offset++) {
-                    size_t index = pcb->page_table[i];
-                    free_line (index + offset);
-                }
-            }
-            free (pcb->page_table);
-        }
-    }
+    // if (strcmp (pcb->name, "") != 0) {
+    //     struct LoadedScripts *script = find_script (pcb->name);
+    //     if (script && script->page_table == pcb->page_table) {
+    //         // Original process - free frames and page table
+    //         for (size_t i = 0; i < pcb->page_count; i++) {
+    //             for (size_t offset = 0; offset < FRAME_SIZE; offset++) {
+    //                 size_t index = pcb->page_table[i];
+    //                 free_line (index + offset);
+    //             }
+    //         }
+    //         free (pcb->page_table);
+    //     }
+    // }
 
     if (strcmp ("", pcb->name)) {
         free (pcb->name);
     }
-    free (pcb->filename);
+    //free (pcb->filename);
     free (pcb);
 }
 
-void load_frame (struct PCB *pcb) {
-    //printf("Removing %s\n", pcb->filename);
+int load_frame (struct PCB *pcb) {
+    //
+
+    FILE *script = fopen (pcb->filename, "rt");
+
+    size_t page_base = find_free_frame ();
+
+    // Frame store is full
+    if (page_base == (size_t) (-1)) {
+        evict_frame ();
+        page_base = find_free_frame ();
+    } else {
+        // Upon page faults when the frame store is not full
+        printf ("Page fault!\n");
+    }
 
     char linebuf[MAX_USER_INPUT];
     memset (linebuf, 0, sizeof (linebuf));
-
-    FILE *script = fopen (pcb->filename, "rt");
     size_t current_line = 0;
     size_t start_line = pcb->pc;
-    
-    while (current_line < start_line && fgets (linebuf, MAX_USER_INPUT, script)) {
-        current_line++; // skip the lines already loaded in
+
+    while (current_line < start_line
+           && fgets (linebuf, MAX_USER_INPUT, script)) {
+        current_line++;         // skip the lines already loaded in
     }
 
-    size_t page_base = find_free_frame();
-
-    // If we've run out of memory, clean up the partially-allocated
-    // pcb and return NULL.
-    if (page_base == (size_t)(-1)) { 
-        free_pcb(pcb);
-        fclose(script);
-    }
-    
     size_t line_count = find_script (pcb->filename)->line_count;
     size_t page = start_line / FRAME_SIZE;
     pcb->page_table[page] = page_base;  // continue inserting from the current page
-    
+    map_frame_to_pt (page_base, pcb->page_table);       // map frame to page table
+
     // Load all lines in this page
-    for (size_t offset = 0; offset < FRAME_SIZE && current_line < line_count; offset++, current_line++) {
-        memset(linebuf, 0, sizeof(linebuf));
-        fgets(linebuf, MAX_USER_INPUT, script);
-        load_frame_line(linebuf, page_base + offset);
+    for (size_t offset = 0; offset < FRAME_SIZE && current_line < line_count;
+         offset++, current_line++) {
+        memset (linebuf, 0, sizeof (linebuf));
+        fgets (linebuf, MAX_USER_INPUT, script);
+        load_frame_line (linebuf, page_base + offset);
     }
 
+    return 1;
+}
+
+size_t evict_frame () {
+    size_t frame = 0;
+
+    // Invalidate this frame in all page tables
+    // Iterate through all loaded scripts and PCBs
+    struct LoadedScripts *current = script_map;
+    while (current) {
+        for (size_t i = 0; i < current->page_count; i++) {
+            if (current->page_table[i] == frame) {
+                current->page_table[i] = (size_t) (-1); // Mark as not loaded
+            }
+        }
+        current = current->next;
+    }
+
+    printf ("Page fault! Victim page contents:\n\n");
+    // Free the frame
+    for (size_t offset = 0; offset < FRAME_SIZE; offset++) {
+        printf ("%s", get_line (frame + offset));
+        free_line (frame + offset);
+    }
+    printf ("\nEnd of victim page contents.\n");
+
+    map_frame_to_pt (frame, NULL);      // map frame to page table
+
+    return frame;
 }

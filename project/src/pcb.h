@@ -73,4 +73,6 @@ struct PCB *create_process_from_FILE (FILE * f, const char *filename);
 //   2. Free the PCB
 void free_pcb (struct PCB *pcb);
 
-void load_frame (struct PCB *pcb);
+int load_frame (struct PCB *pcb);
+
+size_t evict_frame ();

@@ -421,7 +421,7 @@ struct PCB *run_pcb_for_n_steps (struct PCB *pcb, size_t n) {
         if (next_line == (size_t) -1) {
             break;
         }
-        
+
         parseInput (get_line (next_line));
     }
     debug ("run n steps: looped to %ld\n", n);
@@ -541,7 +541,7 @@ int my_exec (char *args[], int args_size) {
         // exec call. Therefore, we're entering background mode.
 
         // add the rest of the input to a new program:
-        struct PCB *pcb = create_process_from_FILE (stdin, "bgtest");
+        struct PCB *pcb = create_process_from_FILE (stdin, "");
         if (!pcb) {
             printf ("Failed to create STDIN process\n");
             goto cleanup;
