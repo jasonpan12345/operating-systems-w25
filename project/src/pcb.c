@@ -188,6 +188,7 @@ struct PCB *create_process_from_FILE (FILE * script, const char *filename) {
             fgets (linebuf, MAX_USER_INPUT, script);
             load_frame_line (linebuf, page_base + offset);
         }
+        reset_frame_lru (page_base / FRAME_SIZE);
     }
 
     load_script (filename, pcb->page_table, pcb->page_count, line_count);
@@ -222,8 +223,6 @@ void free_pcb (struct PCB *pcb) {
 }
 
 int load_frame (struct PCB *pcb) {
-    //
-
     FILE *script = fopen (pcb->filename, "rt");
 
     size_t page_base = find_free_frame ();
@@ -260,11 +259,13 @@ int load_frame (struct PCB *pcb) {
         load_frame_line (linebuf, page_base + offset);
     }
 
+    reset_frame_lru (page_base / FRAME_SIZE);
+
     return 1;
 }
 
 size_t evict_frame () {
-    size_t frame = 0;
+    size_t frame = find_lru_frame () * FRAME_SIZE;
 
     // Invalidate this frame in all page tables
     // Iterate through all loaded scripts and PCBs
@@ -287,6 +288,7 @@ size_t evict_frame () {
     printf ("\nEnd of victim page contents.\n");
 
     map_frame_to_pt (frame, NULL);      // map frame to page table
+    reset_frame_lru (frame / FRAME_SIZE);
 
     return frame;
 }

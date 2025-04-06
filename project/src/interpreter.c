@@ -407,6 +407,9 @@ void runSchedule (struct queue *q, const struct schedule_policy *policy) {
 struct PCB *run_pcb_to_completion (struct PCB *pcb) {
     while (pcb_has_next_instruction (pcb)) {
         size_t instr = pcb_next_instruction (pcb);
+        if (instr == (size_t) -1) {
+            continue;
+        }
         parseInput (get_line (instr));
     }
     free_pcb (pcb);

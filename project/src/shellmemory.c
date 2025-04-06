@@ -25,6 +25,7 @@ struct program_line {
 
 struct program_line linememory[MEM_SIZE];
 size_t *frame_map[MAX_FRAMES];
+static size_t LRU_table[MAX_FRAMES];    // The greater, the older
 
 size_t next_free_line = 0;
 // So we simply record the next free index in a variable.
@@ -80,14 +81,16 @@ size_t find_free_frame () {
 }
 
 void load_frame_line (const char *line, size_t index) {
-    if (index >= MEM_SIZE)
-        return;                 // Safety check
+    if (index >= MEM_SIZE) {
+        return;                 // Safety check        
+    }
     if (linememory[index].allocated) {
         free_line (index);      // Clean up if already allocated
     }
 
     linememory[index].allocated = true;
     linememory[index].line = strdup (line);
+    reset_frame_lru (index / FRAME_SIZE);
 }
 
 void map_frame_to_pt (size_t frame, size_t *page_table) {
@@ -110,6 +113,8 @@ void free_line (size_t index) {
 // like try to free it.
 const char *get_line (size_t index) {
     assert (linememory[index].allocated);
+    update_lru_table ();
+    reset_frame_lru (index / FRAME_SIZE);
     return linememory[index].line;
 }
 
@@ -160,6 +165,10 @@ void mem_init () {
 
     init_linemem ();
     init_frame_map ();
+    // Initialize LRU_table
+    for (size_t i = 0; i < MAX_FRAMES; i++) {
+        LRU_table[i] = 0;
+    }
 }
 
 // Set key value pair
@@ -196,4 +205,31 @@ char *mem_get_value (char *var_in) {
         }
     }
     return NULL;
+}
+
+size_t find_lru_frame () {
+    size_t oldest_time = 0;
+    size_t lru_frame = 0;
+
+    for (size_t i = 0; i < MAX_FRAMES; i++) {
+        //printf("LRU_table[%zu] = %zu\n",i, LRU_table[i]);
+        if (LRU_table[i] > oldest_time && frame_map[i] != NULL) {
+            oldest_time = LRU_table[i];
+            lru_frame = i;
+        }
+    }
+    return lru_frame;
+}
+
+// Add 1 time period to every frame
+void update_lru_table () {
+    for (size_t i = 0; i < MAX_FRAMES; i++) {
+        if (frame_map[i] != NULL) {
+            LRU_table[i]++;     // Only update frames in use
+        }
+    }
+}
+
+void reset_frame_lru (size_t frame) {
+    LRU_table[frame] = 0;
 }

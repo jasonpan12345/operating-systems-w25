@@ -25,3 +25,6 @@ size_t find_free_frame ();
 void load_frame_line (const char *line, size_t index);
 int line_allocated (size_t index);
 void map_frame_to_pt (size_t frame, size_t *page_table);
+size_t find_lru_frame ();
+void update_lru_table ();
+void reset_frame_lru (size_t frame);
